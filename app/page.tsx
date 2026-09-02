@@ -109,26 +109,42 @@ export default function Home() {
   const [restaurantCity, setRestaurantCity] = useState("");
 
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
 
-    async function checkUser() {
+    async function init() {
       try {
-        const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser();
-
-        if (!active) return;
-
         /*
-         * 没有登录
+         * 1. 获取当前登录状态
+         *
+         * 这里使用 getSession，
+         * 不再监听 onAuthStateChange，
+         * 避免登录后重复触发跳转。
          */
-        if (error || !user) {
-          window.location.replace("/login");
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (cancelled) return;
+
+        if (error || !session?.user) {
+          router.replace("/login");
           return;
         }
 
+        const user = session.user;
         const metadata = user.user_metadata || {};
+
+        /*
+         * 2. 获取餐厅资料
+         *
+         * 登录注册时我们保存的是：
+         *
+         * restaurant_name
+         * restaurant_category
+         * restaurant_city
+         * restaurant_created
+         */
 
         const name =
           typeof metadata.restaurant_name === "string"
@@ -146,42 +162,51 @@ export default function Home() {
             : "";
 
         const created =
-          metadata.restaurant_created === true;
+          metadata.restaurant_created === true ||
+          metadata.restaurant_created === "true";
 
         /*
-         * 已登录，但是没有餐厅
+         * 3. 没有餐厅 → 创建餐厅
+         *
+         * 注意：
+         * 这里不要 window.location.replace()
+         *
+         * 统一使用 Next.js router，
+         * 避免 Vercel 部署后出现网址无效/重新加载问题。
          */
+
         if (!created || !name) {
-          window.location.replace("/restaurant/create");
+          router.replace("/restaurant/create");
           return;
         }
 
         /*
-         * 餐厅存在
+         * 4. 已经创建餐厅
          */
+
         setRestaurantName(name);
         setRestaurantCategory(category);
         setRestaurantCity(city);
 
         setChecking(false);
       } catch (error) {
-        console.error("检查登录状态失败:", error);
+        console.error("初始化失败:", error);
 
-        if (active) {
-          window.location.replace("/login");
+        if (!cancelled) {
+          router.replace("/login");
         }
       }
     }
 
-    checkUser();
+    init();
 
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   /*
-   * 登录状态检查期间
+   * 登录状态 / 餐厅资料检查中
    */
   if (checking) {
     return (
@@ -189,14 +214,44 @@ export default function Home() {
         style={{
           minHeight: "100vh",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           background: "#f7f7f5",
           color: "#777",
-          fontSize: "14px",
+          gap: "12px",
         }}
       >
-        正在进入餐谋 AI...
+        <div
+          style={{
+            width: "34px",
+            height: "34px",
+            border: "3px solid #ddd",
+            borderTopColor: "#171717",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
+
+        <div
+          style={{
+            fontSize: "14px",
+          }}
+        >
+          正在进入餐谋 AI...
+        </div>
+
+        <style jsx>{`
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
       </main>
     );
   }
@@ -204,7 +259,7 @@ export default function Home() {
   return (
     <div className="app">
       {/* =========================
-          PC Sidebar
+          Sidebar
       ========================== */}
 
       <aside className="sidebar">
@@ -363,11 +418,9 @@ export default function Home() {
 
             <p className="page-desc">
               {restaurantName}
-
               {restaurantCity
                 ? ` · ${restaurantCity}`
                 : ""}
-
               {restaurantCategory
                 ? ` · ${restaurantCategory}`
                 : ""}
@@ -381,6 +434,8 @@ export default function Home() {
               gap: "10px",
             }}
           >
+            {/* 餐厅选择 */}
+
             <button
               className="store-selector"
               type="button"
@@ -392,6 +447,8 @@ export default function Home() {
             >
               📍 {restaurantName}　⌄
             </button>
+
+            {/* 账户 */}
 
             <button
               type="button"
@@ -476,13 +533,9 @@ export default function Home() {
                   color: "#999",
                 }}
               >
-                {restaurantCity ||
-                  "未填写城市"}
-
+                {restaurantCity || "未填写城市"}
                 {" · "}
-
-                {restaurantCategory ||
-                  "未填写类型"}
+                {restaurantCategory || "未填写类型"}
               </div>
             </div>
           </div>
@@ -581,6 +634,8 @@ export default function Home() {
         ========================== */}
 
         <section className="content-grid">
+          {/* Chart */}
+
           <div className="card section-card">
             <div className="section-title">
               <h3>
@@ -620,6 +675,8 @@ export default function Home() {
               )}
             </div>
           </div>
+
+          {/* Diagnosis */}
 
           <div className="card section-card">
             <div className="section-title">
@@ -767,6 +824,67 @@ export default function Home() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* =========================
+            Footer
+        ========================== */}
+
+        <section
+          style={{
+            marginTop: "18px",
+            padding: "20px",
+            borderRadius: "16px",
+            background: "#171717",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "20px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 800,
+                marginBottom: "5px",
+              }}
+            >
+              {restaurantName}
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                color: "#aaa",
+              }}
+            >
+              餐厅资料已完善，餐谋 AI 可以开始为你分析经营数据。
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                "/restaurant/create"
+              )
+            }
+            style={{
+              flexShrink: 0,
+              border: 0,
+              borderRadius: "9px",
+              padding: "11px 16px",
+              background: "#fff",
+              color: "#171717",
+              fontSize: "12px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            编辑餐厅 →
+          </button>
         </section>
       </main>
     </div>
