@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ChefHat,
@@ -18,10 +18,33 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
 
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function handleSubmit(e: FormEvent) {
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  async function checkSession() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session) {
+        window.location.replace("/");
+        return;
+      }
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function handleSubmit(
+    e: FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     setError("");
@@ -29,7 +52,12 @@ export default function LoginPage() {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail || !cleanEmail.includes("@")) {
+    if (!cleanEmail) {
+      setError("请输入邮箱");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError("请输入正确的邮箱地址");
       return;
     }
@@ -42,54 +70,61 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (mode === "login") {
-        const { data, error } =
-          await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password,
-          });
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data.session) {
-          throw new Error("登录状态创建失败，请重新登录");
-        }
-
-        /*
-         * 登录成功后先进入创建餐厅页面。
-         * 后面我们会增加：
-         * 已有餐厅 → 首页
-         * 没有餐厅 → 创建餐厅
-         */
-        window.location.href = "/restaurant/create";
-        return;
-      }
-
-      const { data, error } =
-        await supabase.auth.signUp({
+      if (mode === "register") {
+        const {
+          data,
+          error: signUpError,
+        } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
+          options: {
+            data: {
+              avatar_url: "",
+              restaurant_created: false,
+            },
+          },
         });
 
-      if (error) {
-        throw error;
-      }
+        if (signUpError) {
+          throw signUpError;
+        }
 
-      /*
-       * 如果 Supabase 开启了邮箱验证，
-       * 这里不会立即产生 session。
-       */
-      if (!data.session) {
-        setMessage(
-          "注册成功！请先打开邮箱，点击验证链接，然后回来登录。"
-        );
-        setMode("login");
+        // 如果 Supabase 开启了邮箱确认
+        if (!data.session) {
+          setMessage(
+            "注册成功！请检查邮箱并完成验证，然后回来登录。"
+          );
+          return;
+        }
+
+        window.location.replace("/");
         return;
       }
 
-      window.location.href = "/restaurant/create";
+      const {
+        data,
+        error: signInError,
+      } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (signInError) {
+        throw signInError;
+      }
+
+      if (!data.session) {
+        throw new Error(
+          "登录状态创建失败，请重新登录"
+        );
+      }
+
+      // 让 Supabase session 完整写入浏览器后再跳转
+      await new Promise((resolve) =>
+        setTimeout(resolve, 300)
+      );
+
+      window.location.replace("/");
     } catch (err) {
       const text =
         err instanceof Error
@@ -99,16 +134,21 @@ export default function LoginPage() {
       if (
         text.includes("Invalid login credentials")
       ) {
-        setError("邮箱或密码错误");
+        setError(
+          "邮箱或密码错误。如果还没有账户，请先注册。"
+        );
       } else if (
         text.includes("User already registered")
       ) {
-        setError("这个邮箱已经注册，请直接登录");
-        setMode("login");
+        setError(
+          "这个邮箱已经注册，请直接登录。"
+        );
       } else if (
-        text.includes("Password should be at least")
+        text.includes("Email not confirmed")
       ) {
-        setError("密码至少需要 6 位");
+        setError(
+          "邮箱还没有验证，请先去邮箱完成验证。"
+        );
       } else {
         setError(text);
       }
@@ -117,166 +157,356 @@ export default function LoginPage() {
     }
   }
 
-  return (
-    <main className="auth-page">
-      <div className="auth-card">
+  if (checking) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f7f7f5",
+          color: "#777",
+        }}
+      >
+        正在检查登录状态...
+      </main>
+    );
+  }
 
-        <Link href="/" className="auth-back">
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(180deg,#fafaf8 0%,#f4f4f1 100%)",
+        padding: "24px 16px",
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "430px",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            color: "#666",
+            textDecoration: "none",
+            fontSize: 13,
+            marginBottom: 22,
+          }}
+        >
           <ArrowLeft size={16} />
           返回首页
         </Link>
 
-        <div className="auth-logo">
-          <div className="auth-logo-mark">
-            <ChefHat size={25} />
-          </div>
-
-          <div>
-            <div className="auth-logo-title">
-              餐谋 AI
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7e7e3",
+            borderRadius: 20,
+            padding: 26,
+            boxShadow:
+              "0 15px 45px rgba(0,0,0,.05)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 28,
+            }}
+          >
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: "#171717",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ChefHat size={22} />
             </div>
 
-            <div className="auth-logo-subtitle">
-              懂餐饮，更懂赚钱
+            <div>
+              <div
+                style={{
+                  fontSize: 17,
+                  fontWeight: 850,
+                }}
+              >
+                餐谋 AI
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#999",
+                }}
+              >
+                懂餐饮，更懂赚钱
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="auth-heading">
-          <h1>
+          <h1
+            style={{
+              margin: "0 0 7px",
+              fontSize: 27,
+              letterSpacing: "-.6px",
+            }}
+          >
             {mode === "login"
               ? "登录餐谋 AI"
               : "创建餐谋 AI 账户"}
           </h1>
 
-          <p>
-            {mode === "login"
-              ? "登录后管理你的餐厅经营数据。"
-              : "创建账户，开始管理你的餐厅。"}
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="auth-form"
-        >
-
-          <label>
-            邮箱
-
-            <div className="input-with-icon">
-              <Mail size={17} />
-
-              <input
-                type="email"
-                placeholder="请输入邮箱"
-                value={email}
-                onChange={(e) =>
-                  setEmail(e.target.value)
-                }
-                autoComplete="email"
-              />
-            </div>
-          </label>
-
-          <label>
-            密码
-
-            <div className="input-with-icon">
-              <Lock size={17} />
-
-              <input
-                type="password"
-                placeholder="至少 6 位密码"
-                value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
-                autoComplete={
-                  mode === "login"
-                    ? "current-password"
-                    : "new-password"
-                }
-              />
-            </div>
-          </label>
-
-          {error && (
-            <div className="auth-message error">
-              {error}
-            </div>
-          )}
-
-          {message && (
-            <div className="auth-message success">
-              {message}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="auth-submit"
-            disabled={loading}
+          <p
+            style={{
+              margin: "0 0 25px",
+              color: "#888",
+              fontSize: 13,
+            }}
           >
-            {loading ? (
-              <>
-                <Loader2
+            {mode === "login"
+              ? "登录后管理你的餐厅和经营数据。"
+              : "创建账户，开始使用餐谋 AI。"}
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 16,
+              }}
+            >
+              邮箱
+
+              <div
+                style={{
+                  position: "relative",
+                  marginTop: 8,
+                }}
+              >
+                <Mail
                   size={17}
-                  className="spin"
+                  style={{
+                    position: "absolute",
+                    left: 14,
+                    top: 14,
+                    color: "#999",
+                  }}
                 />
-                {mode === "login"
-                  ? "登录中..."
-                  : "注册中..."}
-              </>
-            ) : (
-              <>
-                {mode === "login"
-                  ? "登录"
-                  : "创建账户"}
-              </>
+
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) =>
+                    setEmail(e.target.value)
+                  }
+                  placeholder="请输入邮箱"
+                  autoComplete="email"
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    height: 46,
+                    boxSizing: "border-box",
+                    border:
+                      "1px solid #dededb",
+                    borderRadius: 11,
+                    padding: "0 14px 0 42px",
+                    outline: "none",
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+            </label>
+
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 800,
+                marginBottom: 16,
+              }}
+            >
+              密码
+
+              <div
+                style={{
+                  position: "relative",
+                  marginTop: 8,
+                }}
+              >
+                <Lock
+                  size={17}
+                  style={{
+                    position: "absolute",
+                    left: 14,
+                    top: 14,
+                    color: "#999",
+                  }}
+                />
+
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
+                  placeholder="至少 6 位密码"
+                  autoComplete={
+                    mode === "login"
+                      ? "current-password"
+                      : "new-password"
+                  }
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    height: 46,
+                    boxSizing: "border-box",
+                    border:
+                      "1px solid #dededb",
+                    borderRadius: 11,
+                    padding: "0 14px 0 42px",
+                    outline: "none",
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+            </label>
+
+            {error && (
+              <div
+                style={{
+                  background: "#fff3f1",
+                  color: "#c0392b",
+                  padding: "11px 13px",
+                  borderRadius: 9,
+                  fontSize: 12,
+                  marginBottom: 14,
+                }}
+              >
+                {error}
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="auth-switch">
-          {mode === "login" ? (
-            <>
-              还没有账户？
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("register");
-                  setError("");
-                  setMessage("");
+            {message && (
+              <div
+                style={{
+                  background: "#f1f8f3",
+                  color: "#287a42",
+                  padding: "11px 13px",
+                  borderRadius: 9,
+                  fontSize: 12,
+                  marginBottom: 14,
                 }}
               >
-                免费注册
-              </button>
-            </>
-          ) : (
-            <>
-              已经有账户？
+                {message}
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("login");
-                  setError("");
-                  setMessage("");
-                }}
-              >
-                返回登录
-              </button>
-            </>
-          )}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: "100%",
+                height: 50,
+                border: 0,
+                borderRadius: 11,
+                background: "#171717",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 800,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                cursor: "pointer",
+              }}
+            >
+              {loading ? (
+                <>
+                  <Loader2
+                    size={17}
+                    className="spin"
+                  />
+                  请稍候...
+                </>
+              ) : mode === "login" ? (
+                "登录"
+              ) : (
+                "注册账户"
+              )}
+            </button>
+          </form>
+
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: 20,
+              fontSize: 12,
+              color: "#888",
+            }}
+          >
+            {mode === "login"
+              ? "还没有账户？"
+              : "已经有账户？"}
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode(
+                  mode === "login"
+                    ? "register"
+                    : "login"
+                );
+                setError("");
+                setMessage("");
+              }}
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "#d95b32",
+                fontWeight: 800,
+                marginLeft: 4,
+                cursor: "pointer",
+              }}
+            >
+              {mode === "login"
+                ? "立即注册"
+                : "返回登录"}
+            </button>
+          </div>
+
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: 18,
+              color: "#aaa",
+              fontSize: 10,
+              lineHeight: 1.6,
+            }}
+          >
+            登录即表示你同意服务条款与隐私政策
+          </div>
         </div>
-
-        <div className="auth-footer">
-          登录即表示你同意餐谋 AI
-          的服务条款与隐私政策。
-        </div>
-
       </div>
     </main>
   );
