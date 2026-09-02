@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Flame,
   LayoutDashboard,
+  LogIn,
   MessageSquareWarning,
   Settings,
   Sparkles,
@@ -146,16 +147,20 @@ export default function Home() {
         <div className="sidebar-bottom">
           <div className="pro-mini">
             <div className="pro-mini-title">升级餐谋 PRO</div>
+
             <div className="pro-mini-text">
               解锁完整 AI 经营分析，让每一次经营决策都有数据依据。
             </div>
-            <button className="pro-mini-button">立即升级</button>
+
+            <button className="pro-mini-button">
+              立即升级
+            </button>
           </div>
 
-          <button className="nav-item">
-            <Settings />
-            我的账户
-          </button>
+          <a href="/login" className="nav-item">
+            <LogIn />
+            登录 / 我的账户
+          </a>
         </div>
       </aside>
 
@@ -167,23 +172,56 @@ export default function Home() {
             <div className="mobile-logo-mark">
               <ChefHat size={18} />
             </div>
+
             <span>餐谋 AI</span>
           </div>
 
-          <Settings size={20} />
+          <a href="/login">
+            <LogIn size={20} />
+          </a>
         </div>
 
         <div className="topbar">
           <div>
-            <h1 className="page-title">经营总览</h1>
+            <h1 className="page-title">
+              经营总览
+            </h1>
+
             <p className="page-desc">
               今天是经营的第 126 天，看看你的店今天赚得怎么样。
             </p>
           </div>
 
-          <button className="store-selector">
-            📍 我的餐厅　⌄
-          </button>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            <button className="store-selector">
+              📍 我的餐厅　⌄
+            </button>
+
+            <a
+              href="/login"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "#171717",
+                color: "#fff",
+                padding: "10px 15px",
+                borderRadius: "9px",
+                fontSize: "12px",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              <LogIn size={14} />
+              登录 / 注册
+            </a>
+          </div>
         </div>
 
         {/* AI Banner */}
@@ -193,7 +231,9 @@ export default function Home() {
             餐谋 AI 今日诊断
           </div>
 
-          <h2>营业额上涨 12.8%，但预计利润下降 3.6%</h2>
+          <h2>
+            营业额上涨 12.8%，但预计利润下降 3.6%
+          </h2>
 
           <p>
             AI 分析发现：今天高折扣套餐订单占比上升，同时高毛利菜品销量下降。
@@ -211,17 +251,24 @@ export default function Home() {
             const Icon = stat.icon;
 
             return (
-              <div className="card stat-card" key={stat.label}>
+              <div
+                className="card stat-card"
+                key={stat.label}
+              >
                 <div className="stat-head">
                   <span>{stat.label}</span>
                   <Icon size={16} />
                 </div>
 
-                <div className="stat-value">{stat.value}</div>
+                <div className="stat-value">
+                  {stat.value}
+                </div>
 
                 <div
                   className={`stat-change ${
-                    stat.type === "up" ? "up" : "down"
+                    stat.type === "up"
+                      ? "up"
+                      : "down"
                   }`}
                 >
                   {stat.change} 较昨日
@@ -241,13 +288,24 @@ export default function Home() {
 
             <div className="chart">
               {chartData.map((item, index) => (
-                <div className="bar-wrap" key={item.day}>
+                <div
+                  className="bar-wrap"
+                  key={item.day}
+                >
                   <div
-                    className={`bar ${index === chartData.length - 1 ? "today" : ""}`}
-                    style={{ height: `${item.value}%` }}
+                    className={`bar ${
+                      index === chartData.length - 1
+                        ? "today"
+                        : ""
+                    }`}
+                    style={{
+                      height: `${item.value}%`,
+                    }}
                   />
 
-                  <span className="bar-label">{item.day}</span>
+                  <span className="bar-label">
+                    {item.day}
+                  </span>
                 </div>
               ))}
             </div>
@@ -267,6 +325,7 @@ export default function Home() {
 
                 <div className="diagnosis-content">
                   <strong>套餐利润偏低</strong>
+
                   <p>
                     双人套餐毛利率仅 44.1%，建议重新计算优惠力度。
                   </p>
@@ -279,7 +338,10 @@ export default function Home() {
                 </div>
 
                 <div className="diagnosis-content">
-                  <strong>招牌香辣鸡表现优秀</strong>
+                  <strong>
+                    招牌香辣鸡表现优秀
+                  </strong>
+
                   <p>
                     销量和利润同时领先，建议增加首页及门店曝光。
                   </p>
@@ -292,7 +354,10 @@ export default function Home() {
                 </div>
 
                 <div className="diagnosis-content">
-                  <strong>差评出现集中趋势</strong>
+                  <strong>
+                    差评出现集中趋势
+                  </strong>
+
                   <p>
                     最近 7 条差评中，有 4 条提到出餐速度。
                   </p>
@@ -325,7 +390,9 @@ export default function Home() {
               {dishes.map((dish) => (
                 <tr key={dish.name}>
                   <td>
-                    <span className="dish-name">{dish.name}</span>
+                    <span className="dish-name">
+                      {dish.name}
+                    </span>
                   </td>
 
                   <td>{dish.price}</td>
@@ -333,13 +400,17 @@ export default function Home() {
                   <td>{dish.cost}</td>
 
                   <td>
-                    <span className="margin">{dish.margin}</span>
+                    <span className="margin">
+                      {dish.margin}
+                    </span>
                   </td>
 
                   <td>{dish.sales}</td>
 
                   <td>
-                    <span className={`badge ${dish.tagType}`}>
+                    <span
+                      className={`badge ${dish.tagType}`}
+                    >
                       {dish.tag}
                     </span>
                   </td>
