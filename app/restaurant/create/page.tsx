@@ -1,6 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,6 +17,7 @@ import {
   Store,
   Utensils,
 } from "lucide-react";
+
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -22,6 +28,16 @@ type FormData = {
   address: string;
   daily_orders: string;
   average_price: string;
+};
+
+type Restaurant = {
+  id: string;
+  name: string;
+  category: string;
+  city: string;
+  address: string | null;
+  daily_orders: number | null;
+  average_price: number | string | null;
 };
 
 const categories = [
@@ -42,21 +58,36 @@ const categories = [
 export default function CreateRestaurantPage() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [checkingExisting, setCheckingExisting] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [form, setForm] = useState<FormData>({
-    name: "",
-    category: "",
-    city: "",
-    address: "",
-    daily_orders: "",
-    average_price: "",
-  });
+  const [saving, setSaving] =
+    useState(false);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [existingRestaurant, setExistingRestaurant] =
+    useState<Restaurant | null>(null);
+
+  const [form, setForm] =
+    useState<FormData>({
+      name: "",
+      category: "",
+      city: "",
+      address: "",
+      daily_orders: "",
+      average_price: "",
+    });
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState(false);
+
+  /*
+   * =========================
+   * 初始化
+   * =========================
+   */
 
   useEffect(() => {
     let mounted = true;
@@ -64,7 +95,11 @@ export default function CreateRestaurantPage() {
     async function init() {
       try {
         setLoading(true);
+        setError("");
 
+        /*
+         * ① 获取登录用户
+         */
         const {
           data: { user },
           error: userError,
@@ -78,60 +113,96 @@ export default function CreateRestaurantPage() {
         }
 
         /*
-         * 如果用户已经有餐厅，
-         * 不应该再次进入创建页面。
-         *
-         * 直接回经营总览。
+         * ② 从数据库查餐厅
          */
-        const { data: restaurant, error: restaurantError } =
-          await supabase
-            .from("restaurants")
-            .select(
-              "id,name,category,city,address,daily_orders,average_price"
-            )
-            .eq("user_id", user.id)
-            .order("created_at", {
-              ascending: false,
-            })
-            .limit(1)
-            .maybeSingle();
+        const {
+          data: restaurant,
+          error: restaurantError,
+        } = await supabase
+          .from("restaurants")
+          .select(
+            "id,name,category,city,address,daily_orders,average_price"
+          )
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle();
 
         if (!mounted) return;
 
         if (restaurantError) {
-          /*
-           * 这里不直接跳转。
-           * 让用户看到真正的数据库错误，
-           * 避免再次出现无限跳转。
-           */
           console.error(
-            "检查餐厅失败:",
+            "读取餐厅失败:",
             restaurantError
           );
 
           setError(
-            `读取餐厅信息失败：${restaurantError.message}`
+            `读取餐厅资料失败：${restaurantError.message}`
           );
 
           setLoading(false);
-          setCheckingExisting(false);
           return;
         }
 
+        /*
+         * ③ 已经有餐厅
+         *
+         * 不跳首页。
+         *
+         * 直接加载资料，
+         * 当前页面变成“编辑门店”。
+         */
         if (restaurant) {
-          router.replace("/");
-          return;
+          setExistingRestaurant(
+            restaurant
+          );
+
+          setForm({
+            name:
+              restaurant.name || "",
+
+            category:
+              restaurant.category || "",
+
+            city:
+              restaurant.city || "",
+
+            address:
+              restaurant.address || "",
+
+            daily_orders:
+              restaurant.daily_orders !==
+              null
+                ? String(
+                    restaurant.daily_orders
+                  )
+                : "",
+
+            average_price:
+              restaurant.average_price !==
+              null
+                ? String(
+                    restaurant.average_price
+                  )
+                : "",
+          });
         }
 
         setLoading(false);
-        setCheckingExisting(false);
       } catch (err) {
-        console.error("初始化创建餐厅页面失败:", err);
+        console.error(
+          "初始化餐厅页面失败:",
+          err
+        );
 
         if (mounted) {
-          setError("页面初始化失败，请刷新后重试。");
+          setError(
+            "页面初始化失败，请刷新后重试。"
+          );
+
           setLoading(false);
-          setCheckingExisting(false);
         }
       }
     }
@@ -142,6 +213,12 @@ export default function CreateRestaurantPage() {
       mounted = false;
     };
   }, [router]);
+
+  /*
+   * =========================
+   * 更新表单
+   * =========================
+   */
 
   function updateField(
     field: keyof FormData,
@@ -155,7 +232,17 @@ export default function CreateRestaurantPage() {
     if (error) {
       setError("");
     }
+
+    if (success) {
+      setSuccess(false);
+    }
   }
+
+  /*
+   * =========================
+   * 提交
+   * =========================
+   */
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -165,68 +252,102 @@ export default function CreateRestaurantPage() {
     if (saving) return;
 
     setError("");
+    setSuccess(false);
+
+    const name =
+      form.name.trim();
+
+    const category =
+      form.category.trim();
+
+    const city =
+      form.city.trim();
+
+    const address =
+      form.address.trim();
+
+    const dailyOrders =
+      Number(form.daily_orders);
+
+    const averagePrice =
+      Number(form.average_price);
 
     /*
      * 基础校验
      */
-    const name = form.name.trim();
-    const category = form.category.trim();
-    const city = form.city.trim();
-    const address = form.address.trim();
-
-    const dailyOrders = Number(form.daily_orders);
-    const averagePrice = Number(form.average_price);
 
     if (!name) {
-      setError("请输入餐厅名称。");
+      setError(
+        "请输入餐厅名称。"
+      );
       return;
     }
 
     if (name.length < 2) {
-      setError("餐厅名称至少需要 2 个字符。");
+      setError(
+        "餐厅名称至少需要 2 个字符。"
+      );
       return;
     }
 
     if (!category) {
-      setError("请选择餐饮类型。");
+      setError(
+        "请选择餐饮类型。"
+      );
       return;
     }
 
     if (!city) {
-      setError("请输入所在城市。");
+      setError(
+        "请输入所在城市。"
+      );
       return;
     }
 
     if (!address) {
-      setError("请输入门店地址。");
+      setError(
+        "请输入门店地址。"
+      );
       return;
     }
 
     if (!form.daily_orders.trim()) {
-      setError("请输入日均订单量。");
+      setError(
+        "请输入日均订单量。"
+      );
       return;
     }
 
     if (
-      !Number.isFinite(dailyOrders) ||
+      !Number.isFinite(
+        dailyOrders
+      ) ||
       dailyOrders < 0 ||
       dailyOrders > 100000
     ) {
-      setError("日均订单量请输入 0～100000 之间的数字。");
+      setError(
+        "日均订单量请输入 0～100000 之间的数字。"
+      );
       return;
     }
 
     if (!form.average_price.trim()) {
-      setError("请输入平均客单价。");
+      setError(
+        "请输入平均客单价。"
+      );
       return;
     }
 
     if (
-      !Number.isFinite(averagePrice) ||
+      !Number.isFinite(
+        averagePrice
+      ) ||
       averagePrice <= 0 ||
       averagePrice > 10000
     ) {
-      setError("平均客单价请输入 0～10000 之间的数字。");
+      setError(
+        "平均客单价请输入 0～10000 之间的数字。"
+      );
       return;
     }
 
@@ -234,7 +355,7 @@ export default function CreateRestaurantPage() {
       setSaving(true);
 
       /*
-       * 获取当前登录用户
+       * ① 再次获取用户
        */
       const {
         data: { user },
@@ -242,60 +363,161 @@ export default function CreateRestaurantPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        setError("登录状态已失效，请重新登录。");
+        setError(
+          "登录状态已失效，请重新登录。"
+        );
+
         router.replace("/login");
         return;
       }
 
       /*
-       * 二次检查：
-       * 防止用户重复创建餐厅。
+       * =========================
+       * 已存在 → UPDATE
+       * =========================
        */
-      const { data: existingRestaurant, error: existingError } =
-        await supabase
-          .from("restaurants")
-          .select("id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .maybeSingle();
-
-      if (existingError) {
-        console.error(
-          "检查已有餐厅失败:",
-          existingError
-        );
-
-        setError(
-          `检查餐厅失败：${existingError.message}`
-        );
-
-        return;
-      }
 
       if (existingRestaurant) {
-        router.replace("/");
-        return;
-      }
-
-      /*
-       * 创建餐厅
-       */
-      const { data: restaurant, error: insertError } =
-        await supabase
+        const {
+          data,
+          error: updateError,
+        } = await supabase
           .from("restaurants")
-          .insert({
-            user_id: user.id,
+          .update({
             name,
             category,
             city,
             address,
-            daily_orders: Math.round(dailyOrders),
-            average_price: averagePrice,
+            daily_orders:
+              Math.round(
+                dailyOrders
+              ),
+            average_price:
+              averagePrice,
           })
+          .eq(
+            "id",
+            existingRestaurant.id
+          )
+          .eq(
+            "user_id",
+            user.id
+          )
           .select(
             "id,name,category,city,address,daily_orders,average_price"
           )
           .single();
+
+        if (updateError) {
+          console.error(
+            "更新餐厅失败:",
+            updateError
+          );
+
+          if (
+            updateError.message
+              .toLowerCase()
+              .includes(
+                "row-level security"
+              )
+          ) {
+            setError(
+              "保存失败：Supabase 数据库权限（RLS）没有允许当前用户修改餐厅。"
+            );
+          } else {
+            setError(
+              `保存失败：${updateError.message}`
+            );
+          }
+
+          return;
+        }
+
+        if (!data) {
+          setError(
+            "保存失败，请稍后重试。"
+          );
+          return;
+        }
+
+        /*
+         * 更新本地状态
+         */
+        setExistingRestaurant(
+          data
+        );
+
+        setForm({
+          name:
+            data.name || "",
+
+          category:
+            data.category || "",
+
+          city:
+            data.city || "",
+
+          address:
+            data.address || "",
+
+          daily_orders:
+            data.daily_orders !==
+            null
+              ? String(
+                  data.daily_orders
+                )
+              : "",
+
+          average_price:
+            data.average_price !==
+            null
+              ? String(
+                  data.average_price
+                )
+              : "",
+        });
+
+        setSuccess(true);
+
+        /*
+         * 保存成功后回首页
+         */
+        setTimeout(() => {
+          router.replace("/");
+          router.refresh();
+        }, 700);
+
+        return;
+      }
+
+      /*
+       * =========================
+       * 不存在 → INSERT
+       * =========================
+       */
+
+      const {
+        data: restaurant,
+        error: insertError,
+      } = await supabase
+        .from("restaurants")
+        .insert({
+          user_id: user.id,
+          name,
+          category,
+          city,
+          address,
+          daily_orders:
+            Math.round(
+              dailyOrders
+            ),
+          average_price:
+            averagePrice,
+        })
+        .select(
+          "id,name,category,city,address,daily_orders,average_price"
+        )
+        .single();
 
       if (insertError) {
         console.error(
@@ -303,13 +525,12 @@ export default function CreateRestaurantPage() {
           insertError
         );
 
-        /*
-         * 给用户一个比较容易看懂的错误。
-         */
         if (
           insertError.message
             .toLowerCase()
-            .includes("row-level security")
+            .includes(
+              "row-level security"
+            )
         ) {
           setError(
             "创建失败：Supabase 数据库权限（RLS）没有允许当前用户创建餐厅。"
@@ -324,148 +545,261 @@ export default function CreateRestaurantPage() {
       }
 
       if (!restaurant) {
-        setError("餐厅创建失败，请稍后重试。");
+        setError(
+          "餐厅创建失败，请稍后重试。"
+        );
+
         return;
       }
 
       /*
-       * 创建成功
+       * 保存成功
        */
+      setExistingRestaurant(
+        restaurant
+      );
+
       setSuccess(true);
 
       /*
-       * 给数据库一点时间完成写入，
-       * 然后回首页。
+       * 返回首页
        */
       setTimeout(() => {
         router.replace("/");
         router.refresh();
-      }, 500);
+      }, 700);
     } catch (err) {
       console.error(
-        "创建餐厅发生未知错误:",
+        "保存餐厅发生未知错误:",
         err
       );
 
       setError(
-        "创建餐厅失败，请检查网络后重试。"
+        "保存餐厅失败，请检查网络后重试。"
       );
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading || checkingExisting) {
+  /*
+   * =========================
+   * Loading
+   * =========================
+   */
+
+  if (loading) {
     return (
       <main style={styles.loadingPage}>
-        <div style={styles.loadingBox}>
-          <div style={styles.loadingIcon}>
+        <div
+          style={styles.loadingBox}
+        >
+          <div
+            style={styles.loadingIcon}
+          >
             <ChefHat size={25} />
           </div>
 
-          <div style={styles.spinner} />
+          <div
+            style={styles.spinner}
+          />
 
-          <div style={styles.loadingTitle}>
-            正在准备餐厅资料...
+          <div
+            style={styles.loadingTitle}
+          >
+            正在读取餐厅资料...
           </div>
 
-          <div style={styles.loadingText}>
+          <div
+            style={styles.loadingText}
+          >
             请稍候
           </div>
         </div>
+
+        <style jsx>{`
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
       </main>
     );
   }
 
+  const isEditing =
+    Boolean(existingRestaurant);
+
   return (
     <main style={styles.page}>
-      {/* 背景装饰 */}
-      <div style={styles.backgroundGlowOne} />
-      <div style={styles.backgroundGlowTwo} />
+      <div
+        style={
+          styles.backgroundGlowOne
+        }
+      />
 
-      <div style={styles.container}>
-        {/* 顶部 */}
+      <div
+        style={
+          styles.backgroundGlowTwo
+        }
+      />
+
+      <div
+        style={styles.container}
+      >
+        {/* Header */}
+
         <header style={styles.header}>
           <button
             type="button"
-            onClick={() => router.replace("/")}
-            style={styles.backButton}
+            onClick={() =>
+              router.replace("/")
+            }
+            style={
+              styles.backButton
+            }
           >
             <ArrowLeft size={17} />
             返回
           </button>
 
           <div style={styles.brand}>
-            <div style={styles.brandIcon}>
+            <div
+              style={styles.brandIcon}
+            >
               <ChefHat size={19} />
             </div>
 
             <div>
-              <div style={styles.brandName}>
+              <div
+                style={styles.brandName}
+              >
                 餐谋 AI
               </div>
 
-              <div style={styles.brandSub}>
+              <div
+                style={styles.brandSub}
+              >
                 懂餐饮，更懂赚钱
               </div>
             </div>
           </div>
 
           <div style={styles.step}>
-            <span style={styles.stepActive}>
+            <span
+              style={
+                styles.stepActive
+              }
+            >
               01
             </span>
-            <span style={styles.stepLine} />
+
+            <span
+              style={styles.stepLine}
+            />
+
             <span>02</span>
           </div>
         </header>
 
-        {/* 主体 */}
+        {/* Hero */}
+
         <section style={styles.hero}>
-          <div style={styles.eyebrow}>
+          <div
+            style={styles.eyebrow}
+          >
             <Store size={15} />
-            第一步 · 创建门店
+
+            {isEditing
+              ? "门店设置"
+              : "第一步 · 创建门店"}
           </div>
 
           <h1 style={styles.title}>
-            先让餐谋 AI
-            <br />
-            了解你的餐厅
+            {isEditing ? (
+              <>
+                修改你的
+                <br />
+                餐厅资料
+              </>
+            ) : (
+              <>
+                先让餐谋 AI
+                <br />
+                了解你的餐厅
+              </>
+            )}
           </h1>
 
-          <p style={styles.description}>
-            填写一些基础经营信息，餐谋 AI
-            才能给你更准确的经营分析和赚钱建议。
+          <p
+            style={
+              styles.description
+            }
+          >
+            {isEditing
+              ? "修改后的信息会立即保存，用于后续经营分析。"
+              : "填写一些基础经营信息，餐谋 AI 才能给你更准确的经营分析和赚钱建议。"}
           </p>
         </section>
 
-        {/* 表单卡片 */}
+        {/* Card */}
+
         <form
           onSubmit={handleSubmit}
           style={styles.card}
         >
-          {/* 餐厅名称 */}
+          {/* 基本信息 */}
+
           <div style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <div style={styles.sectionIcon}>
+            <div
+              style={
+                styles.sectionHeader
+              }
+            >
+              <div
+                style={
+                  styles.sectionIcon
+                }
+              >
                 <Building2 size={18} />
               </div>
 
               <div>
-                <h2 style={styles.sectionTitle}>
+                <h2
+                  style={
+                    styles.sectionTitle
+                  }
+                >
                   基本信息
                 </h2>
 
-                <p style={styles.sectionDescription}>
+                <p
+                  style={
+                    styles.sectionDescription
+                  }
+                >
                   先告诉我们你的门店是什么
                 </p>
               </div>
             </div>
 
+            {/* 名称 */}
+
             <div style={styles.field}>
-              <label style={styles.label}>
+              <label
+                style={styles.label}
+              >
                 餐厅名称
-                <span style={styles.required}>
+                <span
+                  style={
+                    styles.required
+                  }
+                >
                   *
                 </span>
               </label>
@@ -480,82 +814,131 @@ export default function CreateRestaurantPage() {
                 }
                 placeholder="例如：小乐家的黄焖鸡"
                 maxLength={50}
+                disabled={saving}
                 style={styles.input}
                 autoComplete="organization"
               />
             </div>
 
-            {/* 餐饮类型 */}
+            {/* 类型 */}
+
             <div style={styles.field}>
-              <label style={styles.label}>
+              <label
+                style={styles.label}
+              >
                 餐饮类型
-                <span style={styles.required}>
+                <span
+                  style={
+                    styles.required
+                  }
+                >
                   *
                 </span>
               </label>
 
-              <div style={styles.categoryGrid}>
-                {categories.map((item) => {
-                  const selected =
-                    form.category === item;
+              <div
+                style={
+                  styles.categoryGrid
+                }
+              >
+                {categories.map(
+                  (item) => {
+                    const selected =
+                      form.category ===
+                      item;
 
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() =>
-                        updateField(
-                          "category",
-                          item
-                        )
-                      }
-                      style={{
-                        ...styles.categoryButton,
-                        ...(selected
-                          ? styles.categoryButtonActive
-                          : {}),
-                      }}
-                    >
-                      {selected && (
-                        <Check
-                          size={13}
-                          strokeWidth={3}
-                        />
-                      )}
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        disabled={
+                          saving
+                        }
+                        onClick={() =>
+                          updateField(
+                            "category",
+                            item
+                          )
+                        }
+                        style={{
+                          ...styles.categoryButton,
+                          ...(selected
+                            ? styles.categoryButtonActive
+                            : {}),
+                        }}
+                      >
+                        {selected && (
+                          <Check
+                            size={13}
+                            strokeWidth={
+                              3
+                            }
+                          />
+                        )}
 
-                      {item}
-                    </button>
-                  );
-                })}
+                        {item}
+                      </button>
+                    );
+                  }
+                )}
               </div>
             </div>
           </div>
 
-          <div style={styles.divider} />
+          <div
+            style={styles.divider}
+          />
 
-          {/* 地址信息 */}
+          {/* 地址 */}
+
           <div style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <div style={styles.sectionIcon}>
+            <div
+              style={
+                styles.sectionHeader
+              }
+            >
+              <div
+                style={
+                  styles.sectionIcon
+                }
+              >
                 <MapPin size={18} />
               </div>
 
               <div>
-                <h2 style={styles.sectionTitle}>
+                <h2
+                  style={
+                    styles.sectionTitle
+                  }
+                >
                   门店位置
                 </h2>
 
-                <p style={styles.sectionDescription}>
+                <p
+                  style={
+                    styles.sectionDescription
+                  }
+                >
                   用于后续进行区域经营分析
                 </p>
               </div>
             </div>
 
-            <div style={styles.twoColumns}>
+            <div
+              style={
+                styles.twoColumns
+              }
+            >
               <div style={styles.field}>
-                <label style={styles.label}>
+                <label
+                  style={styles.label}
+                >
                   所在城市
-                  <span style={styles.required}>
+                  <span
+                    style={
+                      styles.required
+                    }
+                  >
                     *
                   </span>
                 </label>
@@ -570,15 +953,22 @@ export default function CreateRestaurantPage() {
                   }
                   placeholder="例如：无锡"
                   maxLength={30}
+                  disabled={saving}
                   style={styles.input}
                   autoComplete="address-level2"
                 />
               </div>
 
               <div style={styles.field}>
-                <label style={styles.label}>
+                <label
+                  style={styles.label}
+                >
                   门店地址
-                  <span style={styles.required}>
+                  <span
+                    style={
+                      styles.required
+                    }
+                  >
                     *
                   </span>
                 </label>
@@ -593,6 +983,7 @@ export default function CreateRestaurantPage() {
                   }
                   placeholder="例如：梁溪区中山路88号"
                   maxLength={100}
+                  disabled={saving}
                   style={styles.input}
                   autoComplete="street-address"
                 />
@@ -600,38 +991,75 @@ export default function CreateRestaurantPage() {
             </div>
           </div>
 
-          <div style={styles.divider} />
+          <div
+            style={styles.divider}
+          />
 
-          {/* 经营数据 */}
+          {/* 经营概况 */}
+
           <div style={styles.section}>
-            <div style={styles.sectionHeader}>
-              <div style={styles.sectionIcon}>
+            <div
+              style={
+                styles.sectionHeader
+              }
+            >
+              <div
+                style={
+                  styles.sectionIcon
+                }
+              >
                 <CircleDollarSign size={18} />
               </div>
 
               <div>
-                <h2 style={styles.sectionTitle}>
+                <h2
+                  style={
+                    styles.sectionTitle
+                  }
+                >
                   经营概况
                 </h2>
 
-                <p style={styles.sectionDescription}>
+                <p
+                  style={
+                    styles.sectionDescription
+                  }
+                >
                   粗略数据即可，后续可以随时修改
                 </p>
               </div>
             </div>
 
-            <div style={styles.twoColumns}>
+            <div
+              style={
+                styles.twoColumns
+              }
+            >
+              {/* 日均订单 */}
+
               <div style={styles.field}>
-                <label style={styles.label}>
+                <label
+                  style={styles.label}
+                >
                   日均订单
-                  <span style={styles.required}>
+                  <span
+                    style={
+                      styles.required
+                    }
+                  >
                     *
                   </span>
                 </label>
 
-                <div style={styles.inputWithSuffix}>
+                <div
+                  style={
+                    styles.inputWithSuffix
+                  }
+                >
                   <input
-                    value={form.daily_orders}
+                    value={
+                      form.daily_orders
+                    }
                     onChange={(e) =>
                       updateField(
                         "daily_orders",
@@ -644,34 +1072,61 @@ export default function CreateRestaurantPage() {
                     step="1"
                     inputMode="numeric"
                     placeholder="例如：120"
-                    style={styles.inputInside}
+                    disabled={saving}
+                    style={
+                      styles.inputInside
+                    }
                   />
 
-                  <span style={styles.suffix}>
+                  <span
+                    style={
+                      styles.suffix
+                    }
+                  >
                     单
                   </span>
                 </div>
 
-                <div style={styles.helper}>
+                <div
+                  style={styles.helper}
+                >
                   平均每天大约有多少订单？
                 </div>
               </div>
 
+              {/* 客单价 */}
+
               <div style={styles.field}>
-                <label style={styles.label}>
+                <label
+                  style={styles.label}
+                >
                   平均客单价
-                  <span style={styles.required}>
+                  <span
+                    style={
+                      styles.required
+                    }
+                  >
                     *
                   </span>
                 </label>
 
-                <div style={styles.inputWithSuffix}>
-                  <span style={styles.prefix}>
+                <div
+                  style={
+                    styles.inputWithSuffix
+                  }
+                >
+                  <span
+                    style={
+                      styles.prefix
+                    }
+                  >
                     ¥
                   </span>
 
                   <input
-                    value={form.average_price}
+                    value={
+                      form.average_price
+                    }
                     onChange={(e) =>
                       updateField(
                         "average_price",
@@ -684,91 +1139,150 @@ export default function CreateRestaurantPage() {
                     step="0.01"
                     inputMode="decimal"
                     placeholder="例如：35"
+                    disabled={saving}
                     style={
                       styles.inputInsideWithPrefix
                     }
                   />
 
-                  <span style={styles.suffix}>
+                  <span
+                    style={
+                      styles.suffix
+                    }
+                  >
                     /单
                   </span>
                 </div>
 
-                <div style={styles.helper}>
+                <div
+                  style={styles.helper}
+                >
                   顾客平均每单消费多少钱？
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 错误 */}
+          {/* Error */}
+
           {error && (
-            <div style={styles.errorBox}>
-              <div style={styles.errorIcon}>
+            <div
+              style={
+                styles.errorBox
+              }
+            >
+              <div
+                style={
+                  styles.errorIcon
+                }
+              >
                 !
               </div>
 
               <div>
-                <div style={styles.errorTitle}>
-                  创建失败
+                <div
+                  style={
+                    styles.errorTitle
+                  }
+                >
+                  操作失败
                 </div>
 
-                <div style={styles.errorText}>
+                <div
+                  style={
+                    styles.errorText
+                  }
+                >
                   {error}
                 </div>
               </div>
             </div>
           )}
 
-          {/* 成功 */}
+          {/* Success */}
+
           {success && (
-            <div style={styles.successBox}>
-              <div style={styles.successIcon}>
+            <div
+              style={
+                styles.successBox
+              }
+            >
+              <div
+                style={
+                  styles.successIcon
+                }
+              >
                 <Check size={17} />
               </div>
 
               <div>
-                <div style={styles.successTitle}>
-                  餐厅创建成功
+                <div
+                  style={
+                    styles.successTitle
+                  }
+                >
+                  {isEditing
+                    ? "餐厅资料保存成功"
+                    : "餐厅创建成功"}
                 </div>
 
-                <div style={styles.successText}>
+                <div
+                  style={
+                    styles.successText
+                  }
+                >
                   正在进入餐谋 AI 经营总览...
                 </div>
               </div>
             </div>
           )}
 
-          {/* 提交 */}
+          {/* Footer */}
+
           <div style={styles.footer}>
-            <div style={styles.footerTip}>
+            <div
+              style={styles.footerTip}
+            >
               <Utensils size={14} />
+
               信息可以之后在门店设置中修改
             </div>
 
             <button
               type="submit"
-              disabled={saving || success}
+              disabled={
+                saving || success
+              }
               style={{
                 ...styles.submitButton,
-                ...(saving || success
+                ...(saving ||
+                success
                   ? styles.submitButtonDisabled
                   : {}),
               }}
             >
               {saving ? (
                 <>
-                  <span style={styles.buttonSpinner} />
-                  正在创建...
+                  <span
+                    style={
+                      styles.buttonSpinner
+                    }
+                  />
+
+                  正在保存...
                 </>
               ) : success ? (
                 <>
                   <Check size={18} />
-                  创建成功
+
+                  保存成功
                 </>
               ) : (
                 <>
-                  创建餐厅
+                  {isEditing
+                    ? "保存修改"
+                    : "创建餐厅"}
+
                   <ArrowRight size={18} />
                 </>
               )}
@@ -776,16 +1290,38 @@ export default function CreateRestaurantPage() {
           </div>
         </form>
 
-        {/* 底部说明 */}
-        <div style={styles.bottomText}>
+        <div
+          style={styles.bottomText}
+        >
           餐谋 AI · 你的餐饮经营助手
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </main>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+/*
+ * =========================
+ * Styles
+ * =========================
+ */
+
+const styles: Record<
+  string,
+  React.CSSProperties
+> = {
   page: {
     minHeight: "100vh",
     background:
@@ -923,7 +1459,8 @@ const styles: Record<string, React.CSSProperties> = {
 
   title: {
     margin: "18px 0 0",
-    fontSize: "clamp(30px, 5vw, 46px)",
+    fontSize:
+      "clamp(30px, 5vw, 46px)",
     lineHeight: 1.14,
     letterSpacing: "-1.8px",
     fontWeight: 900,
@@ -1010,7 +1547,6 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     color: "#171717",
     fontSize: "13px",
-    transition: "border-color 0.15s ease",
   },
 
   categoryGrid: {
