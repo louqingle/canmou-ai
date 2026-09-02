@@ -1,181 +1,253 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Building2,
+  BarChart3,
   ChefHat,
-  MapPin,
-  Store,
+  CircleDollarSign,
+  ClipboardCheck,
+  Flame,
+  LayoutDashboard,
+  MessageSquareWarning,
+  Settings,
+  Sparkles,
+  TrendingUp,
+  User,
   Utensils,
+  Wallet,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const categories = [
-  "中餐",
-  "快餐",
-  "烧烤",
-  "火锅",
-  "面馆",
-  "奶茶饮品",
-  "西餐",
-  "烘焙甜品",
-  "小吃",
-  "其他",
+const stats = [
+  {
+    label: "今日营业额",
+    value: "¥8,326",
+    change: "↑ 12.8%",
+    icon: CircleDollarSign,
+    type: "up",
+  },
+  {
+    label: "今日订单",
+    value: "286",
+    change: "↑ 8.4%",
+    icon: ClipboardCheck,
+    type: "up",
+  },
+  {
+    label: "客单价",
+    value: "¥29.11",
+    change: "↑ 4.1%",
+    icon: Wallet,
+    type: "up",
+  },
+  {
+    label: "预计毛利率",
+    value: "58.2%",
+    change: "↓ 3.6%",
+    icon: TrendingUp,
+    type: "down",
+  },
 ];
 
-export default function CreateRestaurantPage() {
+const dishes = [
+  {
+    name: "招牌香辣鸡",
+    price: "¥32",
+    cost: "¥11.2",
+    margin: "65.0%",
+    sales: "186",
+    tag: "利润爆款",
+    tagType: "hot",
+  },
+  {
+    name: "黑椒牛柳饭",
+    price: "¥28",
+    cost: "¥10.5",
+    margin: "62.5%",
+    sales: "142",
+    tag: "主推",
+    tagType: "good",
+  },
+  {
+    name: "双人超值套餐",
+    price: "¥58",
+    cost: "¥32.4",
+    margin: "44.1%",
+    sales: "96",
+    tag: "优化",
+    tagType: "warn",
+  },
+  {
+    name: "酸辣汤",
+    price: "¥12",
+    cost: "¥8.1",
+    margin: "32.5%",
+    sales: "51",
+    tag: "低利润",
+    tagType: "warn",
+  },
+];
+
+const chartData = [
+  { day: "周一", value: 54 },
+  { day: "周二", value: 68 },
+  { day: "周三", value: 61 },
+  { day: "周四", value: 76 },
+  { day: "周五", value: 82 },
+  { day: "周六", value: 96 },
+  { day: "今天", value: 88 },
+];
+
+type Restaurant = {
+  id: string;
+  name: string;
+  category: string | null;
+  city: string | null;
+  address: string | null;
+  daily_orders: number | null;
+  average_price: number | null;
+};
+
+export default function Home() {
   const router = useRouter();
 
-  const [restaurantName, setRestaurantName] = useState("");
-  const [category, setCategory] = useState("");
-  const [city, setCity] = useState("");
-  const [address, setAddress] = useState("");
-  const [dailyOrders, setDailyOrders] = useState("");
-  const [averagePrice, setAveragePrice] = useState("");
-
-  const [userText, setUserText] = useState("");
   const [checking, setChecking] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [restaurant, setRestaurant] =
+    useState<Restaurant | null>(null);
 
   useEffect(() => {
-    checkUser();
-  }, []);
+    let mounted = true;
 
-  async function checkUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    async function loadRestaurant() {
+      try {
+        /*
+         * ① 获取当前登录用户
+         */
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-    if (!user) {
-      router.replace("/login");
-      return;
+        if (!mounted) return;
+
+        if (userError || !user) {
+          router.replace("/login");
+          return;
+        }
+
+        /*
+         * ② 直接从 restaurants 表查询当前用户的餐厅
+         *
+         * 不再使用：
+         * user.user_metadata.restaurant_created
+         *
+         * 这是这次修复的核心。
+         */
+        const {
+          data,
+          error: restaurantError,
+        } = await supabase
+          .from("restaurants")
+          .select(
+            `
+              id,
+              name,
+              category,
+              city,
+              address,
+              daily_orders,
+              average_price
+            `
+          )
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle();
+
+        if (!mounted) return;
+
+        /*
+         * ③ 查询数据库出错
+         */
+        if (restaurantError) {
+          console.error(
+            "读取餐厅失败：",
+            restaurantError
+          );
+
+          setChecking(false);
+
+          return;
+        }
+
+        /*
+         * ④ 用户还没有餐厅
+         *
+         * 进入创建餐厅页面
+         */
+        if (!data) {
+          router.replace(
+            "/restaurant/create"
+          );
+
+          return;
+        }
+
+        /*
+         * ⑤ 找到了餐厅
+         */
+        setRestaurant(data);
+
+        setChecking(false);
+      } catch (error) {
+        console.error(
+          "加载餐厅发生错误：",
+          error
+        );
+
+        if (mounted) {
+          setChecking(false);
+        }
+      }
     }
 
-    setUserText(
-      user.email ||
-        user.phone ||
-        "当前登录用户"
+    loadRestaurant();
+
+    /*
+     * 监听登录状态
+     */
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.replace("/login");
+        }
+
+        /*
+         * 登录完成以后重新读取餐厅
+         */
+        if (
+          event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED"
+        ) {
+          loadRestaurant();
+        }
+      }
     );
 
-    setChecking(false);
-  }
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
-  async function handleSubmit(
-    e: FormEvent<HTMLFormElement>
-  ) {
-    e.preventDefault();
-
-    setError("");
-    setMessage("");
-
-    if (!restaurantName.trim()) {
-      setError("请输入餐厅名称");
-      return;
-    }
-
-    if (!category) {
-      setError("请选择餐饮类型");
-      return;
-    }
-
-    if (!city.trim()) {
-      setError("请输入所在城市");
-      return;
-    }
-
-    const orders = dailyOrders
-      ? Number(dailyOrders)
-      : null;
-
-    const price = averagePrice
-      ? Number(averagePrice)
-      : null;
-
-    if (
-      orders !== null &&
-      (!Number.isFinite(orders) || orders < 0)
-    ) {
-      setError("日均订单请输入正确数字");
-      return;
-    }
-
-    if (
-      price !== null &&
-      (!Number.isFinite(price) || price < 0)
-    ) {
-      setError("平均客单价请输入正确数字");
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        throw userError;
-      }
-
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      const { error: insertError } =
-        await supabase
-          .from("restaurants")
-          .insert({
-            user_id: user.id,
-
-            name: restaurantName.trim(),
-
-            category,
-
-            city: city.trim(),
-
-            address:
-              address.trim() || null,
-
-            daily_orders: orders,
-
-            average_price: price,
-          });
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      setMessage(
-        "餐厅创建成功，正在进入经营总览..."
-      );
-
-      setTimeout(() => {
-        router.replace("/");
-        router.refresh();
-      }, 700);
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "创建餐厅失败，请稍后重试"
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
+  /*
+   * 加载中
+   */
   if (checking) {
     return (
       <main
@@ -189,505 +261,584 @@ export default function CreateRestaurantPage() {
           fontSize: "14px",
         }}
       >
-        正在检查登录状态...
+        正在加载餐厅...
+      </main>
+    );
+  }
+
+  /*
+   * 理论上不会进入这里
+   * 因为没有餐厅时已经跳转创建页面
+   */
+  if (!restaurant) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f7f7f5",
+          color: "#777",
+          fontSize: "14px",
+        }}
+      >
+        正在进入餐厅创建页面...
       </main>
     );
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #fafaf8 0%, #f4f4f1 100%)",
-        padding: "24px 16px 60px",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "680px",
-          margin: "0 auto",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "34px",
-          }}
-        >
-          <Link
-            href="/"
+    <div className="app">
+      {/* =========================
+          Sidebar
+      ========================== */}
+
+      <aside className="sidebar">
+        <div className="logo">
+          <div className="logo-mark">
+            <ChefHat size={21} />
+          </div>
+
+          <div>
+            <div className="logo-title">
+              餐谋 AI
+            </div>
+
+            <div className="logo-subtitle">
+              懂餐饮，更懂赚钱
+            </div>
+          </div>
+        </div>
+
+        <nav className="nav">
+          <button
+            className="nav-item active"
+            type="button"
+          >
+            <LayoutDashboard />
+            经营总览
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+          >
+            <Utensils />
+            菜品分析
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+          >
+            <Sparkles />
+            AI 工具
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+          >
+            <BarChart3 />
+            经营数据
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+          >
+            <ClipboardCheck />
+            AI 报告
+          </button>
+
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() =>
+              router.push(
+                "/restaurant/create"
+              )
+            }
+          >
+            <Settings />
+            门店设置
+          </button>
+        </nav>
+
+        <div className="sidebar-bottom">
+          <div className="pro-mini">
+            <div className="pro-mini-title">
+              升级餐谋 PRO
+            </div>
+
+            <div className="pro-mini-text">
+              解锁完整 AI 经营分析，让每一次经营决策都有数据依据。
+            </div>
+
+            <button
+              className="pro-mini-button"
+              type="button"
+            >
+              立即升级
+            </button>
+          </div>
+
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() =>
+              router.push("/account")
+            }
+          >
+            <User />
+            我的账户
+          </button>
+        </div>
+      </aside>
+
+      {/* =========================
+          Main
+      ========================== */}
+
+      <main className="main">
+        {/* Mobile Header */}
+
+        <div className="mobile-header">
+          <div className="mobile-logo">
+            <div className="mobile-logo-mark">
+              <ChefHat size={18} />
+            </div>
+
+            <span>餐谋 AI</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push("/account")
+            }
             style={{
+              border: 0,
+              background: "transparent",
+              cursor: "pointer",
+              padding: 4,
               display: "flex",
               alignItems: "center",
-              gap: "7px",
-              color: "#555",
-              textDecoration: "none",
-              fontSize: "13px",
-              fontWeight: 600,
             }}
           >
-            <ArrowLeft size={16} />
-            返回
-          </Link>
+            <User size={20} />
+          </button>
+        </div>
+
+        {/* Topbar */}
+
+        <div className="topbar">
+          <div>
+            <h1 className="page-title">
+              经营总览
+            </h1>
+
+            <p className="page-desc">
+              {restaurant.name}
+
+              {restaurant.city
+                ? ` · ${restaurant.city}`
+                : ""}
+
+              {restaurant.category
+                ? ` · ${restaurant.category}`
+                : ""}
+            </p>
+          </div>
 
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "9px",
+              gap: "10px",
+            }}
+          >
+            <button
+              className="store-selector"
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/restaurant/create"
+                )
+              }
+            >
+              📍 {restaurant.name}　⌄
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/account")
+              }
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "#171717",
+                color: "#fff",
+                padding: "10px 15px",
+                borderRadius: "9px",
+                border: 0,
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <User size={14} />
+              我的账户
+            </button>
+          </div>
+        </div>
+
+        {/* =========================
+            Restaurant Info
+        ========================== */}
+
+        <section
+          style={{
+            marginBottom: "18px",
+            padding: "18px 20px",
+            background: "#fff",
+            border: "1px solid #e7e7e3",
+            borderRadius: "14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "15px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "13px",
             }}
           >
             <div
               style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "10px",
+                width: "45px",
+                height: "45px",
+                borderRadius: "12px",
                 background: "#171717",
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
-              <ChefHat size={19} />
+              <ChefHat size={22} />
             </div>
 
             <div>
               <div
                 style={{
+                  fontSize: "16px",
                   fontWeight: 850,
-                  fontSize: "15px",
+                  color: "#171717",
                 }}
               >
-                餐谋 AI
+                {restaurant.name}
               </div>
 
               <div
                 style={{
-                  fontSize: "10px",
+                  marginTop: "4px",
+                  fontSize: "11px",
                   color: "#999",
                 }}
               >
-                懂餐饮，更懂赚钱
+                {restaurant.city ||
+                  "未填写城市"}
+
+                {" · "}
+
+                {restaurant.category ||
+                  "未填写类型"}
               </div>
             </div>
           </div>
-        </div>
-
-        <div style={{ marginBottom: "24px" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "7px",
-              padding: "7px 10px",
-              borderRadius: "999px",
-              background: "#fff",
-              border: "1px solid #e7e7e3",
-              color: "#666",
-              fontSize: "11px",
-              fontWeight: 700,
-              marginBottom: "14px",
-            }}
-          >
-            <Store size={13} />
-            第一步：建立你的门店
-          </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "30px",
-              lineHeight: 1.2,
-              letterSpacing: "-0.8px",
-              color: "#171717",
-            }}
-          >
-            创建我的餐厅
-          </h1>
-
-          <p
-            style={{
-              margin: "9px 0 0",
-              color: "#777",
-              fontSize: "14px",
-              lineHeight: 1.7,
-            }}
-          >
-            告诉餐谋 AI 一点你的门店信息，
-            我们才能给你更准确的经营建议。
-          </p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            background: "#fff",
-            border: "1px solid #e7e7e3",
-            borderRadius: "18px",
-            padding: "24px",
-            boxShadow:
-              "0 10px 35px rgba(0,0,0,.04)",
-          }}
-        >
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: 800,
-                marginBottom: "8px",
-              }}
-            >
-              餐厅名称 *
-            </label>
-
-            <div style={{ position: "relative" }}>
-              <Building2
-                size={17}
-                style={{
-                  position: "absolute",
-                  left: "14px",
-                  top: "14px",
-                  color: "#999",
-                }}
-              />
-
-              <input
-                value={restaurantName}
-                onChange={(e) =>
-                  setRestaurantName(
-                    e.target.value
-                  )
-                }
-                placeholder="例如：小乐家常菜"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  height: "46px",
-                  border: "1px solid #dededb",
-                  borderRadius: "11px",
-                  padding: "0 14px 0 42px",
-                  boxSizing: "border-box",
-                  outline: "none",
-                  fontSize: "14px",
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: 800,
-                marginBottom: "8px",
-              }}
-            >
-              餐饮类型 *
-            </label>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns:
-                  "repeat(5, 1fr)",
-                gap: "8px",
-              }}
-            >
-              {categories.map((item) => {
-                const active =
-                  category === item;
-
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    disabled={saving}
-                    onClick={() =>
-                      setCategory(item)
-                    }
-                    style={{
-                      height: "40px",
-                      borderRadius: "9px",
-                      border: active
-                        ? "1px solid #171717"
-                        : "1px solid #e3e3df",
-                      background: active
-                        ? "#171717"
-                        : "#fff",
-                      color: active
-                        ? "#fff"
-                        : "#555",
-                      fontSize: "12px",
-                      fontWeight: active
-                        ? 800
-                        : 600,
-                    }}
-                  >
-                    {item}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: 800,
-                marginBottom: "8px",
-              }}
-            >
-              所在城市 *
-            </label>
-
-            <div style={{ position: "relative" }}>
-              <MapPin
-                size={17}
-                style={{
-                  position: "absolute",
-                  left: "14px",
-                  top: "14px",
-                  color: "#999",
-                }}
-              />
-
-              <input
-                value={city}
-                onChange={(e) =>
-                  setCity(e.target.value)
-                }
-                placeholder="例如：无锡市"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  height: "46px",
-                  border: "1px solid #dededb",
-                  borderRadius: "11px",
-                  padding: "0 14px 0 42px",
-                  boxSizing: "border-box",
-                  outline: "none",
-                  fontSize: "14px",
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: 800,
-                marginBottom: "8px",
-              }}
-            >
-              门店地址
-              <span
-                style={{
-                  color: "#aaa",
-                  fontWeight: 500,
-                  marginLeft: "6px",
-                }}
-              >
-                可选
-              </span>
-            </label>
-
-            <input
-              value={address}
-              onChange={(e) =>
-                setAddress(e.target.value)
-              }
-              placeholder="例如：人民中路 88 号"
-              disabled={saving}
-              style={{
-                width: "100%",
-                height: "46px",
-                border: "1px solid #dededb",
-                borderRadius: "11px",
-                padding: "0 14px",
-                boxSizing: "border-box",
-                outline: "none",
-                fontSize: "14px",
-              }}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "1fr 1fr",
-              gap: "12px",
-              marginBottom: "20px",
-            }}
-          >
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: 800,
-                  marginBottom: "8px",
-                }}
-              >
-                日均订单
-              </label>
-
-              <input
-                type="number"
-                min="0"
-                value={dailyOrders}
-                onChange={(e) =>
-                  setDailyOrders(
-                    e.target.value
-                  )
-                }
-                placeholder="例如 200"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  height: "46px",
-                  border: "1px solid #dededb",
-                  borderRadius: "11px",
-                  padding: "0 14px",
-                  boxSizing: "border-box",
-                  outline: "none",
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: 800,
-                  marginBottom: "8px",
-                }}
-              >
-                平均客单价
-              </label>
-
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={averagePrice}
-                onChange={(e) =>
-                  setAveragePrice(
-                    e.target.value
-                  )
-                }
-                placeholder="例如 35"
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  height: "46px",
-                  border: "1px solid #dededb",
-                  borderRadius: "11px",
-                  padding: "0 14px",
-                  boxSizing: "border-box",
-                  outline: "none",
-                }}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div
-              style={{
-                padding: "11px 13px",
-                borderRadius: "9px",
-                background: "#fff3f1",
-                color: "#c0392b",
-                fontSize: "12px",
-                marginBottom: "14px",
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          {message && (
-            <div
-              style={{
-                padding: "11px 13px",
-                borderRadius: "9px",
-                background: "#f1f8f3",
-                color: "#287a42",
-                fontSize: "12px",
-                marginBottom: "14px",
-              }}
-            >
-              {message}
-            </div>
-          )}
 
           <button
-            type="submit"
-            disabled={saving}
+            type="button"
+            onClick={() =>
+              router.push(
+                "/restaurant/create"
+              )
+            }
             style={{
-              width: "100%",
-              height: "50px",
-              border: 0,
-              borderRadius: "11px",
-              background: "#171717",
-              color: "#fff",
-              fontSize: "14px",
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              opacity: saving ? 0.7 : 1,
+              border: "1px solid #dededb",
+              background: "#fff",
+              borderRadius: "9px",
+              padding: "9px 13px",
+              fontSize: "11px",
+              fontWeight: 700,
+              color: "#555",
+              cursor: "pointer",
+              flexShrink: 0,
             }}
           >
-            {saving
-              ? "正在创建..."
-              : "创建我的餐厅"}
-
-            {!saving && (
-              <ArrowRight size={17} />
-            )}
+            编辑餐厅
           </button>
+        </section>
+
+        {/* =========================
+            AI Banner
+        ========================== */}
+
+        <section className="ai-banner">
+          <div className="ai-label">
+            <Sparkles size={15} />
+            餐谋 AI 今日诊断
+          </div>
+
+          <h2>
+            营业额上涨 12.8%，但预计利润下降 3.6%
+          </h2>
+
+          <p>
+            AI 分析发现：今天高折扣套餐订单占比上升，同时高毛利菜品销量下降。
+            建议减少低毛利套餐曝光，并把「招牌香辣鸡」设置为主推菜。
+          </p>
+
+          <button
+            className="ai-action"
+            type="button"
+          >
+            查看完整诊断 →
+          </button>
+        </section>
+
+        {/* =========================
+            Stats
+        ========================== */}
+
+        <section className="stats-grid">
+          {stats.map((stat) => {
+            const Icon = stat.icon;
+
+            return (
+              <div
+                className="card stat-card"
+                key={stat.label}
+              >
+                <div className="stat-head">
+                  <span>{stat.label}</span>
+                  <Icon size={16} />
+                </div>
+
+                <div className="stat-value">
+                  {stat.value}
+                </div>
+
+                <div
+                  className={`stat-change ${
+                    stat.type === "up"
+                      ? "up"
+                      : "down"
+                  }`}
+                >
+                  {stat.change} 较昨日
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        {/* =========================
+            Chart + Diagnosis
+        ========================== */}
+
+        <section className="content-grid">
+          <div className="card section-card">
+            <div className="section-title">
+              <h3>本周营业趋势</h3>
+
+              <span>
+                营业额 / 天
+              </span>
+            </div>
+
+            <div className="chart">
+              {chartData.map(
+                (item, index) => (
+                  <div
+                    className="bar-wrap"
+                    key={item.day}
+                  >
+                    <div
+                      className={`bar ${
+                        index ===
+                        chartData.length - 1
+                          ? "today"
+                          : ""
+                      }`}
+                      style={{
+                        height: `${item.value}%`,
+                      }}
+                    />
+
+                    <span className="bar-label">
+                      {item.day}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          <div className="card section-card">
+            <div className="section-title">
+              <h3>AI 经营提醒</h3>
+
+              <span>
+                刚刚更新
+              </span>
+            </div>
+
+            <div className="diagnosis-list">
+              <div className="diagnosis-item">
+                <div className="diagnosis-icon warning">
+                  <TrendingUp size={16} />
+                </div>
+
+                <div className="diagnosis-content">
+                  <strong>
+                    套餐利润偏低
+                  </strong>
+
+                  <p>
+                    双人套餐毛利率仅 44.1%，建议重新计算优惠力度。
+                  </p>
+                </div>
+              </div>
+
+              <div className="diagnosis-item">
+                <div className="diagnosis-icon good">
+                  <Flame size={16} />
+                </div>
+
+                <div className="diagnosis-content">
+                  <strong>
+                    招牌香辣鸡表现优秀
+                  </strong>
+
+                  <p>
+                    销量和利润同时领先，建议增加首页及门店曝光。
+                  </p>
+                </div>
+              </div>
+
+              <div className="diagnosis-item">
+                <div className="diagnosis-icon danger">
+                  <MessageSquareWarning
+                    size={16}
+                  />
+                </div>
+
+                <div className="diagnosis-content">
+                  <strong>
+                    差评出现集中趋势
+                  </strong>
+
+                  <p>
+                    最近 7 条差评中，有 4 条提到出餐速度。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* =========================
+            Dishes
+        ========================== */}
+
+        <section className="card section-card dishes-card">
+          <div className="section-title">
+            <h3>
+              菜品利润排行榜
+            </h3>
+
+            <button
+              type="button"
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "#777",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              查看全部 →
+            </button>
+          </div>
 
           <div
             style={{
-              marginTop: "13px",
-              textAlign: "center",
-              fontSize: "11px",
-              color: "#aaa",
+              width: "100%",
+              overflowX: "auto",
             }}
           >
-            当前登录账户：{userText}
-          </div>
-        </form>
+            <table className="dish-table">
+              <thead>
+                <tr>
+                  <th>菜品</th>
+                  <th>售价</th>
+                  <th>成本</th>
+                  <th>毛利率</th>
+                  <th>销量</th>
+                  <th>AI 判断</th>
+                </tr>
+              </thead>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "7px",
-            marginTop: "18px",
-            color: "#999",
-            fontSize: "11px",
-          }}
-        >
-          <Utensils size={13} />
-          后续可以继续添加菜品、成本、营业额和经营数据
-        </div>
-      </div>
-    </main>
+              <tbody>
+                {dishes.map((dish) => (
+                  <tr key={dish.name}>
+                    <td>
+                      <span className="dish-name">
+                        {dish.name}
+                      </span>
+                    </td>
+
+                    <td>
+                      {dish.price}
+                    </td>
+
+                    <td>
+                      {dish.cost}
+                    </td>
+
+                    <td>
+                      <span className="margin">
+                        {dish.margin}
+                      </span>
+                    </td>
+
+                    <td>
+                      {dish.sales}
+                    </td>
+
+                    <td>
+                      <span
+                        className={`badge ${dish.tagType}`}
+                      >
+                        {dish.tag}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
