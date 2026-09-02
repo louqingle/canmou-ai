@@ -104,78 +104,84 @@ export default function Home() {
 
   const [checking, setChecking] = useState(true);
 
-  const [restaurantName, setRestaurantName] =
-    useState("");
-
-  const [restaurantCategory, setRestaurantCategory] =
-    useState("");
-
-  const [restaurantCity, setRestaurantCity] =
-    useState("");
+  const [restaurantName, setRestaurantName] = useState("");
+  const [restaurantCategory, setRestaurantCategory] = useState("");
+  const [restaurantCity, setRestaurantCity] = useState("");
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
     async function checkUser() {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
 
-      if (!mounted) return;
+        if (!active) return;
 
-      if (error || !user) {
-        router.replace("/login");
-        return;
+        /*
+         * 没有登录
+         */
+        if (error || !user) {
+          window.location.replace("/login");
+          return;
+        }
+
+        const metadata = user.user_metadata || {};
+
+        const name =
+          typeof metadata.restaurant_name === "string"
+            ? metadata.restaurant_name.trim()
+            : "";
+
+        const category =
+          typeof metadata.restaurant_category === "string"
+            ? metadata.restaurant_category.trim()
+            : "";
+
+        const city =
+          typeof metadata.restaurant_city === "string"
+            ? metadata.restaurant_city.trim()
+            : "";
+
+        const created =
+          metadata.restaurant_created === true;
+
+        /*
+         * 已登录，但是没有餐厅
+         */
+        if (!created || !name) {
+          window.location.replace("/restaurant/create");
+          return;
+        }
+
+        /*
+         * 餐厅存在
+         */
+        setRestaurantName(name);
+        setRestaurantCategory(category);
+        setRestaurantCity(city);
+
+        setChecking(false);
+      } catch (error) {
+        console.error("检查登录状态失败:", error);
+
+        if (active) {
+          window.location.replace("/login");
+        }
       }
-
-      const metadata = user.user_metadata || {};
-
-      const name =
-        metadata.restaurant_name || "";
-
-      const category =
-        metadata.restaurant_category || "";
-
-      const city =
-        metadata.restaurant_city || "";
-
-      /*
-       * 没有创建餐厅
-       * 自动进入创建餐厅页面
-       */
-      if (!name || !metadata.restaurant_created) {
-        router.replace("/restaurant/create");
-        return;
-      }
-
-      setRestaurantName(name);
-      setRestaurantCategory(category);
-      setRestaurantCity(city);
-
-      setChecking(false);
     }
 
     checkUser();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!session) {
-          router.replace("/login");
-        }
-      }
-    );
-
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      active = false;
     };
-  }, [router]);
+  }, []);
 
   /*
-   * 页面加载时不要先显示错误页面
+   * 登录状态检查期间
    */
   if (checking) {
     return (
@@ -190,20 +196,18 @@ export default function Home() {
           fontSize: "14px",
         }}
       >
-        正在加载餐厅...
+        正在进入餐谋 AI...
       </main>
     );
   }
 
   return (
     <div className="app">
-
       {/* =========================
           PC Sidebar
       ========================== */}
 
       <aside className="sidebar">
-
         {/* Logo */}
 
         <div className="logo">
@@ -225,7 +229,6 @@ export default function Home() {
         {/* Navigation */}
 
         <nav className="nav">
-
           <button
             className="nav-item active"
             type="button"
@@ -276,15 +279,12 @@ export default function Home() {
             <Settings />
             门店设置
           </button>
-
         </nav>
 
         {/* Bottom */}
 
         <div className="sidebar-bottom">
-
           <div className="pro-mini">
-
             <div className="pro-mini-title">
               升级餐谋 PRO
             </div>
@@ -299,7 +299,6 @@ export default function Home() {
             >
               立即升级
             </button>
-
           </div>
 
           <button
@@ -312,9 +311,7 @@ export default function Home() {
             <User />
             我的账户
           </button>
-
         </div>
-
       </aside>
 
       {/* =========================
@@ -322,13 +319,10 @@ export default function Home() {
       ========================== */}
 
       <main className="main">
-
         {/* Mobile Header */}
 
         <div className="mobile-header">
-
           <div className="mobile-logo">
-
             <div className="mobile-logo-mark">
               <ChefHat size={18} />
             </div>
@@ -336,7 +330,6 @@ export default function Home() {
             <span>
               餐谋 AI
             </span>
-
           </div>
 
           <button
@@ -352,10 +345,10 @@ export default function Home() {
               display: "flex",
               alignItems: "center",
             }}
+            aria-label="我的账户"
           >
             <User size={20} />
           </button>
-
         </div>
 
         {/* =========================
@@ -363,23 +356,22 @@ export default function Home() {
         ========================== */}
 
         <div className="topbar">
-
           <div>
-
             <h1 className="page-title">
               经营总览
             </h1>
 
             <p className="page-desc">
               {restaurantName}
+
               {restaurantCity
                 ? ` · ${restaurantCity}`
                 : ""}
+
               {restaurantCategory
                 ? ` · ${restaurantCategory}`
                 : ""}
             </p>
-
           </div>
 
           <div
@@ -389,9 +381,6 @@ export default function Home() {
               gap: "10px",
             }}
           >
-
-            {/* 真实餐厅 */}
-
             <button
               className="store-selector"
               type="button"
@@ -426,9 +415,7 @@ export default function Home() {
               <User size={14} />
               我的账户
             </button>
-
           </div>
-
         </div>
 
         {/* =========================
@@ -448,7 +435,6 @@ export default function Home() {
             gap: "15px",
           }}
         >
-
           <div
             style={{
               display: "flex",
@@ -456,7 +442,6 @@ export default function Home() {
               gap: "13px",
             }}
           >
-
             <div
               style={{
                 width: "45px",
@@ -474,7 +459,6 @@ export default function Home() {
             </div>
 
             <div>
-
               <div
                 style={{
                   fontSize: "16px",
@@ -492,13 +476,15 @@ export default function Home() {
                   color: "#999",
                 }}
               >
-                {restaurantCity || "未填写城市"}
+                {restaurantCity ||
+                  "未填写城市"}
+
                 {" · "}
-                {restaurantCategory || "未填写类型"}
+
+                {restaurantCategory ||
+                  "未填写类型"}
               </div>
-
             </div>
-
           </div>
 
           <button
@@ -522,7 +508,6 @@ export default function Home() {
           >
             编辑餐厅
           </button>
-
         </section>
 
         {/* =========================
@@ -530,7 +515,6 @@ export default function Home() {
         ========================== */}
 
         <section className="ai-banner">
-
           <div className="ai-label">
             <Sparkles size={15} />
             餐谋 AI 今日诊断
@@ -551,7 +535,6 @@ export default function Home() {
           >
             查看完整诊断 →
           </button>
-
         </section>
 
         {/* =========================
@@ -559,9 +542,7 @@ export default function Home() {
         ========================== */}
 
         <section className="stats-grid">
-
           {stats.map((stat) => {
-
             const Icon = stat.icon;
 
             return (
@@ -569,7 +550,6 @@ export default function Home() {
                 className="card stat-card"
                 key={stat.label}
               >
-
                 <div className="stat-head">
                   <span>
                     {stat.label}
@@ -591,12 +571,9 @@ export default function Home() {
                 >
                   {stat.change} 较昨日
                 </div>
-
               </div>
             );
-
           })}
-
         </section>
 
         {/* =========================
@@ -604,13 +581,8 @@ export default function Home() {
         ========================== */}
 
         <section className="content-grid">
-
-          {/* Chart */}
-
           <div className="card section-card">
-
             <div className="section-title">
-
               <h3>
                 本周营业趋势
               </h3>
@@ -618,19 +590,15 @@ export default function Home() {
               <span>
                 营业额 / 天
               </span>
-
             </div>
 
             <div className="chart">
-
               {chartData.map(
                 (item, index) => (
-
                   <div
                     className="bar-wrap"
                     key={item.day}
                   >
-
                     <div
                       className={`bar ${
                         index ===
@@ -647,22 +615,14 @@ export default function Home() {
                     <span className="bar-label">
                       {item.day}
                     </span>
-
                   </div>
-
                 )
               )}
-
             </div>
-
           </div>
 
-          {/* Diagnosis */}
-
           <div className="card section-card">
-
             <div className="section-title">
-
               <h3>
                 AI 经营提醒
               </h3>
@@ -670,19 +630,15 @@ export default function Home() {
               <span>
                 刚刚更新
               </span>
-
             </div>
 
             <div className="diagnosis-list">
-
               <div className="diagnosis-item">
-
                 <div className="diagnosis-icon warning">
                   <TrendingUp size={16} />
                 </div>
 
                 <div className="diagnosis-content">
-
                   <strong>
                     套餐利润偏低
                   </strong>
@@ -690,19 +646,15 @@ export default function Home() {
                   <p>
                     双人套餐毛利率仅 44.1%，建议重新计算优惠力度。
                   </p>
-
                 </div>
-
               </div>
 
               <div className="diagnosis-item">
-
                 <div className="diagnosis-icon good">
                   <Flame size={16} />
                 </div>
 
                 <div className="diagnosis-content">
-
                   <strong>
                     招牌香辣鸡表现优秀
                   </strong>
@@ -710,19 +662,17 @@ export default function Home() {
                   <p>
                     销量和利润同时领先，建议增加首页及门店曝光。
                   </p>
-
                 </div>
-
               </div>
 
               <div className="diagnosis-item">
-
                 <div className="diagnosis-icon danger">
-                  <MessageSquareWarning size={16} />
+                  <MessageSquareWarning
+                    size={16}
+                  />
                 </div>
 
                 <div className="diagnosis-content">
-
                   <strong>
                     差评出现集中趋势
                   </strong>
@@ -730,15 +680,10 @@ export default function Home() {
                   <p>
                     最近 7 条差评中，有 4 条提到出餐速度。
                   </p>
-
                 </div>
-
               </div>
-
             </div>
-
           </div>
-
         </section>
 
         {/* =========================
@@ -746,9 +691,7 @@ export default function Home() {
         ========================== */}
 
         <section className="card section-card dishes-card">
-
           <div className="section-title">
-
             <h3>
               菜品利润排行榜
             </h3>
@@ -765,7 +708,6 @@ export default function Home() {
             >
               查看全部 →
             </button>
-
           </div>
 
           <div
@@ -774,11 +716,8 @@ export default function Home() {
               overflowX: "auto",
             }}
           >
-
             <table className="dish-table">
-
               <thead>
-
                 <tr>
                   <th>菜品</th>
                   <th>售价</th>
@@ -787,15 +726,11 @@ export default function Home() {
                   <th>销量</th>
                   <th>AI 判断</th>
                 </tr>
-
               </thead>
 
               <tbody>
-
                 {dishes.map((dish) => (
-
                   <tr key={dish.name}>
-
                     <td>
                       <span className="dish-name">
                         {dish.name}
@@ -821,29 +756,19 @@ export default function Home() {
                     </td>
 
                     <td>
-
                       <span
                         className={`badge ${dish.tagType}`}
                       >
                         {dish.tag}
                       </span>
-
                     </td>
-
                   </tr>
-
                 ))}
-
               </tbody>
-
             </table>
-
           </div>
-
         </section>
-
       </main>
-
     </div>
   );
 }
