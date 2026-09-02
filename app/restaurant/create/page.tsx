@@ -6,12 +6,12 @@ import {
   ArrowRight,
   Building2,
   ChefHat,
-  Loader2,
   MapPin,
   Store,
   Utensils,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const categories = [
@@ -28,15 +28,16 @@ const categories = [
 ];
 
 export default function CreateRestaurantPage() {
+  const router = useRouter();
+
   const [restaurantName, setRestaurantName] = useState("");
   const [category, setCategory] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [dailyOrders, setDailyOrders] = useState("");
   const [averagePrice, setAveragePrice] = useState("");
-  const [monthlyRevenue, setMonthlyRevenue] = useState("");
 
-  const [userEmail, setUserEmail] = useState("");
+  const [userText, setUserText] = useState("");
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -48,27 +49,22 @@ export default function CreateRestaurantPage() {
   }, []);
 
   async function checkUser() {
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (error) {
-        throw error;
-      }
-
-      if (!user) {
-        window.location.href = "/login";
-        return;
-      }
-
-      setUserEmail(user.email || "");
-      setChecking(false);
-    } catch (err) {
-      console.error(err);
-      window.location.href = "/login";
+    if (!user) {
+      router.replace("/login");
+      return;
     }
+
+    setUserText(
+      user.email ||
+        user.phone ||
+        "当前登录用户"
+    );
+
+    setChecking(false);
   }
 
   async function handleSubmit(
@@ -79,11 +75,7 @@ export default function CreateRestaurantPage() {
     setError("");
     setMessage("");
 
-    const name = restaurantName.trim();
-    const cityName = city.trim();
-    const restaurantAddress = address.trim();
-
-    if (!name) {
+    if (!restaurantName.trim()) {
       setError("请输入餐厅名称");
       return;
     }
@@ -93,47 +85,32 @@ export default function CreateRestaurantPage() {
       return;
     }
 
-    if (!cityName) {
+    if (!city.trim()) {
       setError("请输入所在城市");
       return;
     }
 
-    const orders =
-      dailyOrders.trim() === ""
-        ? 0
-        : Number(dailyOrders);
+    const orders = dailyOrders
+      ? Number(dailyOrders)
+      : null;
 
-    const price =
-      averagePrice.trim() === ""
-        ? 0
-        : Number(averagePrice);
-
-    const revenue =
-      monthlyRevenue.trim() === ""
-        ? 0
-        : Number(monthlyRevenue);
+    const price = averagePrice
+      ? Number(averagePrice)
+      : null;
 
     if (
-      !Number.isFinite(orders) ||
-      orders < 0
+      orders !== null &&
+      (!Number.isFinite(orders) || orders < 0)
     ) {
       setError("日均订单请输入正确数字");
       return;
     }
 
     if (
-      !Number.isFinite(price) ||
-      price < 0
+      price !== null &&
+      (!Number.isFinite(price) || price < 0)
     ) {
       setError("平均客单价请输入正确数字");
-      return;
-    }
-
-    if (
-      !Number.isFinite(revenue) ||
-      revenue < 0
-    ) {
-      setError("月营业额请输入正确数字");
       return;
     }
 
@@ -150,109 +127,42 @@ export default function CreateRestaurantPage() {
       }
 
       if (!user) {
-        window.location.href = "/login";
+        router.replace("/login");
         return;
       }
 
-      /*
-       * 检查当前用户是否已经有餐厅
-       */
-      const {
-        data: existingRestaurant,
-        error: existingError,
-      } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+      const { error: insertError } =
+        await supabase
+          .from("restaurants")
+          .insert({
+            user_id: user.id,
 
-      if (existingError) {
-        throw existingError;
-      }
+            name: restaurantName.trim(),
 
-      /*
-       * 如果已经有餐厅：
-       * 更新现有餐厅
-       */
-      if (existingRestaurant) {
-        const { error: updateError } =
-          await supabase
-            .from("restaurants")
-            .update({
-              name,
-              category,
-              city: cityName,
-              address: restaurantAddress,
-              daily_orders: orders,
-              average_price: price,
-              monthly_revenue: revenue,
-              updated_at: new Date().toISOString(),
-            })
-            .eq(
-              "id",
-              existingRestaurant.id
-            );
+            category,
 
-        if (updateError) {
-          throw updateError;
-        }
-      } else {
-        /*
-         * 第一次创建餐厅
-         */
-        const { error: insertError } =
-          await supabase
-            .from("restaurants")
-            .insert({
-              user_id: user.id,
-              name,
-              category,
-              city: cityName,
-              address: restaurantAddress,
-              daily_orders: orders,
-              average_price: price,
-              monthly_revenue: revenue,
-            });
+            city: city.trim(),
 
-        if (insertError) {
-          throw insertError;
-        }
-      }
+            address:
+              address.trim() || null,
 
-      /*
-       * 同时写入 metadata，
-       * 用于兼容旧版本页面。
-       */
-      const { error: metadataError } =
-        await supabase.auth.updateUser({
-          data: {
-            restaurant_name: name,
-            restaurant_category: category,
-            restaurant_city: cityName,
-            restaurant_address:
-              restaurantAddress,
             daily_orders: orders,
-            average_price: price,
-            monthly_revenue: revenue,
-            restaurant_created: true,
-          },
-        });
 
-      if (metadataError) {
-        console.warn(
-          "用户资料同步失败：",
-          metadataError
-        );
+            average_price: price,
+          });
+
+      if (insertError) {
+        throw insertError;
       }
 
       setMessage(
-        "餐厅创建成功，正在进入餐谋 AI..."
+        "餐厅创建成功，正在进入经营总览..."
       );
 
       setTimeout(() => {
-        window.location.href = "/";
-      }, 800);
+        router.replace("/");
+        router.refresh();
+      }, 700);
     } catch (err) {
       console.error(err);
 
@@ -300,7 +210,6 @@ export default function CreateRestaurantPage() {
           margin: "0 auto",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -369,12 +278,7 @@ export default function CreateRestaurantPage() {
           </div>
         </div>
 
-        {/* Intro */}
-        <div
-          style={{
-            marginBottom: "24px",
-          }}
-        >
+        <div style={{ marginBottom: "24px" }}>
           <div
             style={{
               display: "inline-flex",
@@ -419,7 +323,6 @@ export default function CreateRestaurantPage() {
           </p>
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           style={{
@@ -431,26 +334,16 @@ export default function CreateRestaurantPage() {
               "0 10px 35px rgba(0,0,0,.04)",
           }}
         >
-          {/* Name */}
           <div style={{ marginBottom: "20px" }}>
             <label
               style={{
                 display: "block",
                 fontSize: "13px",
                 fontWeight: 800,
-                color: "#222",
                 marginBottom: "8px",
               }}
             >
-              餐厅名称
-              <span
-                style={{
-                  color: "#e24b35",
-                  marginLeft: "3px",
-                }}
-              >
-                *
-              </span>
+              餐厅名称 *
             </label>
 
             <div style={{ position: "relative" }}>
@@ -476,40 +369,27 @@ export default function CreateRestaurantPage() {
                 style={{
                   width: "100%",
                   height: "46px",
-                  border:
-                    "1px solid #dededb",
+                  border: "1px solid #dededb",
                   borderRadius: "11px",
-                  padding:
-                    "0 14px 0 42px",
+                  padding: "0 14px 0 42px",
                   boxSizing: "border-box",
                   outline: "none",
                   fontSize: "14px",
-                  color: "#222",
                 }}
               />
             </div>
           </div>
 
-          {/* Category */}
           <div style={{ marginBottom: "20px" }}>
             <label
               style={{
                 display: "block",
                 fontSize: "13px",
                 fontWeight: 800,
-                color: "#222",
                 marginBottom: "8px",
               }}
             >
-              餐饮类型
-              <span
-                style={{
-                  color: "#e24b35",
-                  marginLeft: "3px",
-                }}
-              >
-                *
-              </span>
+              餐饮类型 *
             </label>
 
             <div
@@ -528,10 +408,10 @@ export default function CreateRestaurantPage() {
                   <button
                     key={item}
                     type="button"
+                    disabled={saving}
                     onClick={() =>
                       setCategory(item)
                     }
-                    disabled={saving}
                     style={{
                       height: "40px",
                       borderRadius: "9px",
@@ -548,9 +428,6 @@ export default function CreateRestaurantPage() {
                       fontWeight: active
                         ? 800
                         : 600,
-                      cursor: saving
-                        ? "not-allowed"
-                        : "pointer",
                     }}
                   >
                     {item}
@@ -560,26 +437,16 @@ export default function CreateRestaurantPage() {
             </div>
           </div>
 
-          {/* City */}
           <div style={{ marginBottom: "20px" }}>
             <label
               style={{
                 display: "block",
                 fontSize: "13px",
                 fontWeight: 800,
-                color: "#222",
                 marginBottom: "8px",
               }}
             >
-              所在城市
-              <span
-                style={{
-                  color: "#e24b35",
-                  marginLeft: "3px",
-                }}
-              >
-                *
-              </span>
+              所在城市 *
             </label>
 
             <div style={{ position: "relative" }}>
@@ -603,11 +470,9 @@ export default function CreateRestaurantPage() {
                 style={{
                   width: "100%",
                   height: "46px",
-                  border:
-                    "1px solid #dededb",
+                  border: "1px solid #dededb",
                   borderRadius: "11px",
-                  padding:
-                    "0 14px 0 42px",
+                  padding: "0 14px 0 42px",
                   boxSizing: "border-box",
                   outline: "none",
                   fontSize: "14px",
@@ -616,14 +481,12 @@ export default function CreateRestaurantPage() {
             </div>
           </div>
 
-          {/* Address */}
           <div style={{ marginBottom: "20px" }}>
             <label
               style={{
                 display: "block",
                 fontSize: "13px",
                 fontWeight: 800,
-                color: "#222",
                 marginBottom: "8px",
               }}
             >
@@ -644,13 +507,12 @@ export default function CreateRestaurantPage() {
               onChange={(e) =>
                 setAddress(e.target.value)
               }
-              placeholder="例如：梁溪区人民中路 88 号"
+              placeholder="例如：人民中路 88 号"
               disabled={saving}
               style={{
                 width: "100%",
                 height: "46px",
-                border:
-                  "1px solid #dededb",
+                border: "1px solid #dededb",
                 borderRadius: "11px",
                 padding: "0 14px",
                 boxSizing: "border-box",
@@ -660,7 +522,6 @@ export default function CreateRestaurantPage() {
             />
           </div>
 
-          {/* Orders + Price */}
           <div
             style={{
               display: "grid",
@@ -680,15 +541,6 @@ export default function CreateRestaurantPage() {
                 }}
               >
                 日均订单
-                <span
-                  style={{
-                    color: "#aaa",
-                    fontWeight: 500,
-                    marginLeft: "6px",
-                  }}
-                >
-                  可选
-                </span>
               </label>
 
               <input
@@ -705,8 +557,7 @@ export default function CreateRestaurantPage() {
                 style={{
                   width: "100%",
                   height: "46px",
-                  border:
-                    "1px solid #dededb",
+                  border: "1px solid #dededb",
                   borderRadius: "11px",
                   padding: "0 14px",
                   boxSizing: "border-box",
@@ -725,15 +576,6 @@ export default function CreateRestaurantPage() {
                 }}
               >
                 平均客单价
-                <span
-                  style={{
-                    color: "#aaa",
-                    fontWeight: 500,
-                    marginLeft: "6px",
-                  }}
-                >
-                  可选
-                </span>
               </label>
 
               <input
@@ -751,8 +593,7 @@ export default function CreateRestaurantPage() {
                 style={{
                   width: "100%",
                   height: "46px",
-                  border:
-                    "1px solid #dededb",
+                  border: "1px solid #dededb",
                   borderRadius: "11px",
                   padding: "0 14px",
                   boxSizing: "border-box",
@@ -762,55 +603,6 @@ export default function CreateRestaurantPage() {
             </div>
           </div>
 
-          {/* Monthly Revenue */}
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: 800,
-                marginBottom: "8px",
-              }}
-            >
-              月营业额
-              <span
-                style={{
-                  color: "#aaa",
-                  fontWeight: 500,
-                  marginLeft: "6px",
-                }}
-              >
-                可选
-              </span>
-            </label>
-
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={monthlyRevenue}
-              onChange={(e) =>
-                setMonthlyRevenue(
-                  e.target.value
-                )
-              }
-              placeholder="例如 100000"
-              disabled={saving}
-              style={{
-                width: "100%",
-                height: "46px",
-                border:
-                  "1px solid #dededb",
-                borderRadius: "11px",
-                padding: "0 14px",
-                boxSizing: "border-box",
-                outline: "none",
-                fontSize: "14px",
-              }}
-            />
-          </div>
-
-          {/* Error */}
           {error && (
             <div
               style={{
@@ -826,7 +618,6 @@ export default function CreateRestaurantPage() {
             </div>
           )}
 
-          {/* Success */}
           {message && (
             <div
               style={{
@@ -842,7 +633,6 @@ export default function CreateRestaurantPage() {
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={saving}
@@ -859,28 +649,15 @@ export default function CreateRestaurantPage() {
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              cursor: saving
-                ? "not-allowed"
-                : "pointer",
               opacity: saving ? 0.7 : 1,
             }}
           >
-            {saving ? (
-              <>
-                <Loader2
-                  size={17}
-                  style={{
-                    animation:
-                      "spin 1s linear infinite",
-                  }}
-                />
-                正在保存...
-              </>
-            ) : (
-              <>
-                创建我的餐厅
-                <ArrowRight size={17} />
-              </>
+            {saving
+              ? "正在创建..."
+              : "创建我的餐厅"}
+
+            {!saving && (
+              <ArrowRight size={17} />
             )}
           </button>
 
@@ -892,11 +669,10 @@ export default function CreateRestaurantPage() {
               color: "#aaa",
             }}
           >
-            当前登录账户：{userEmail}
+            当前登录账户：{userText}
           </div>
         </form>
 
-        {/* Bottom */}
         <div
           style={{
             display: "flex",
@@ -909,7 +685,7 @@ export default function CreateRestaurantPage() {
           }}
         >
           <Utensils size={13} />
-          餐谋 AI 会根据你的门店数据生成经营建议
+          后续可以继续添加菜品、成本、营业额和经营数据
         </div>
       </div>
     </main>
