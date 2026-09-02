@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   BarChart3,
   ChefHat,
@@ -7,7 +8,6 @@ import {
   ClipboardCheck,
   Flame,
   LayoutDashboard,
-  LogIn,
   MessageSquareWarning,
   Settings,
   Sparkles,
@@ -16,6 +16,8 @@ import {
   Utensils,
   Wallet,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 const stats = [
   {
@@ -98,55 +100,121 @@ const chartData = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (!session) {
+        router.replace("/login");
+      }
+    }
+
+    checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session) {
+          router.replace("/login");
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
   return (
     <div className="app">
-      {/* PC Sidebar */}
+      {/* =========================
+          PC Sidebar
+      ========================== */}
       <aside className="sidebar">
+        {/* Logo */}
         <div className="logo">
           <div className="logo-mark">
             <ChefHat size={21} />
           </div>
 
           <div>
-            <div className="logo-title">餐谋 AI</div>
+            <div className="logo-title">
+              餐谋 AI
+            </div>
+
             <div className="logo-subtitle">
               懂餐饮，更懂赚钱
             </div>
           </div>
         </div>
 
+        {/* Navigation */}
         <nav className="nav">
-          <button className="nav-item active">
+          <button
+            className="nav-item active"
+            type="button"
+          >
             <LayoutDashboard />
             经营总览
           </button>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+          >
             <Utensils />
             菜品分析
           </button>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+          >
             <Sparkles />
             AI 工具
           </button>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+          >
             <BarChart3 />
             经营数据
           </button>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+          >
             <ClipboardCheck />
             AI 报告
           </button>
 
-          <button className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() =>
+              router.push(
+                "/restaurant/create"
+              )
+            }
+          >
             <Settings />
             门店设置
           </button>
         </nav>
 
+        {/* Bottom */}
         <div className="sidebar-bottom">
           <div className="pro-mini">
             <div className="pro-mini-title">
@@ -157,20 +225,30 @@ export default function Home() {
               解锁完整 AI 经营分析，让每一次经营决策都有数据依据。
             </div>
 
-            <button className="pro-mini-button">
+            <button
+              className="pro-mini-button"
+              type="button"
+            >
               立即升级
             </button>
           </div>
 
-          {/* 我的账户 */}
-          <a href="/account" className="nav-item">
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() =>
+              router.push("/account")
+            }
+          >
             <User />
             我的账户
-          </a>
+          </button>
         </div>
       </aside>
 
-      {/* Main */}
+      {/* =========================
+          Main
+      ========================== */}
       <main className="main">
         {/* Mobile Header */}
         <div className="mobile-header">
@@ -182,9 +260,23 @@ export default function Home() {
             <span>餐谋 AI</span>
           </div>
 
-          <a href="/account">
+          <button
+            type="button"
+            onClick={() =>
+              router.push("/account")
+            }
+            style={{
+              border: 0,
+              background: "transparent",
+              cursor: "pointer",
+              padding: 4,
+              display: "flex",
+              alignItems: "center",
+            }}
+            aria-label="我的账户"
+          >
             <User size={20} />
-          </a>
+          </button>
         </div>
 
         {/* Topbar */}
@@ -206,12 +298,23 @@ export default function Home() {
               gap: "10px",
             }}
           >
-            <button className="store-selector">
+            <button
+              className="store-selector"
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/restaurant/create"
+                )
+              }
+            >
               📍 我的餐厅　⌄
             </button>
 
-            <a
-              href="/account"
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/account")
+              }
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -220,18 +323,21 @@ export default function Home() {
                 color: "#fff",
                 padding: "10px 15px",
                 borderRadius: "9px",
+                border: 0,
                 fontSize: "12px",
                 fontWeight: 700,
-                textDecoration: "none",
+                cursor: "pointer",
               }}
             >
               <User size={14} />
               我的账户
-            </a>
+            </button>
           </div>
         </div>
 
-        {/* AI Banner */}
+        {/* =========================
+            AI Banner
+        ========================== */}
         <section className="ai-banner">
           <div className="ai-label">
             <Sparkles size={15} />
@@ -247,12 +353,17 @@ export default function Home() {
             建议减少低毛利套餐曝光，并把「招牌香辣鸡」设置为主推菜。
           </p>
 
-          <button className="ai-action">
+          <button
+            className="ai-action"
+            type="button"
+          >
             查看完整诊断 →
           </button>
         </section>
 
-        {/* Stats */}
+        {/* =========================
+            Stats
+        ========================== */}
         <section className="stats-grid">
           {stats.map((stat) => {
             const Icon = stat.icon;
@@ -285,8 +396,11 @@ export default function Home() {
           })}
         </section>
 
-        {/* Chart + Diagnosis */}
+        {/* =========================
+            Chart + Diagnosis
+        ========================== */}
         <section className="content-grid">
+          {/* Chart */}
           <div className="card section-card">
             <div className="section-title">
               <h3>本周营业趋势</h3>
@@ -294,30 +408,34 @@ export default function Home() {
             </div>
 
             <div className="chart">
-              {chartData.map((item, index) => (
-                <div
-                  className="bar-wrap"
-                  key={item.day}
-                >
+              {chartData.map(
+                (item, index) => (
                   <div
-                    className={`bar ${
-                      index === chartData.length - 1
-                        ? "today"
-                        : ""
-                    }`}
-                    style={{
-                      height: `${item.value}%`,
-                    }}
-                  />
+                    className="bar-wrap"
+                    key={item.day}
+                  >
+                    <div
+                      className={`bar ${
+                        index ===
+                        chartData.length - 1
+                          ? "today"
+                          : ""
+                      }`}
+                      style={{
+                        height: `${item.value}%`,
+                      }}
+                    />
 
-                  <span className="bar-label">
-                    {item.day}
-                  </span>
-                </div>
-              ))}
+                    <span className="bar-label">
+                      {item.day}
+                    </span>
+                  </div>
+                )
+              )}
             </div>
           </div>
 
+          {/* Diagnosis */}
           <div className="card section-card">
             <div className="section-title">
               <h3>AI 经营提醒</h3>
@@ -325,13 +443,16 @@ export default function Home() {
             </div>
 
             <div className="diagnosis-list">
+              {/* Warning */}
               <div className="diagnosis-item">
                 <div className="diagnosis-icon warning">
                   <TrendingUp size={16} />
                 </div>
 
                 <div className="diagnosis-content">
-                  <strong>套餐利润偏低</strong>
+                  <strong>
+                    套餐利润偏低
+                  </strong>
 
                   <p>
                     双人套餐毛利率仅 44.1%，建议重新计算优惠力度。
@@ -339,6 +460,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Good */}
               <div className="diagnosis-item">
                 <div className="diagnosis-icon good">
                   <Flame size={16} />
@@ -355,9 +477,12 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Danger */}
               <div className="diagnosis-item">
                 <div className="diagnosis-icon danger">
-                  <MessageSquareWarning size={16} />
+                  <MessageSquareWarning
+                    size={16}
+                  />
                 </div>
 
                 <div className="diagnosis-content">
@@ -374,56 +499,138 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Dishes */}
+        {/* =========================
+            Dishes
+        ========================== */}
         <section className="card section-card dishes-card">
           <div className="section-title">
             <h3>菜品利润排行榜</h3>
-            <span>查看全部 →</span>
+
+            <button
+              type="button"
+              style={{
+                border: 0,
+                background: "transparent",
+                color: "#777",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              查看全部 →
+            </button>
           </div>
 
-          <table className="dish-table">
-            <thead>
-              <tr>
-                <th>菜品</th>
-                <th>售价</th>
-                <th>成本</th>
-                <th>毛利率</th>
-                <th>销量</th>
-                <th>AI 判断</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {dishes.map((dish) => (
-                <tr key={dish.name}>
-                  <td>
-                    <span className="dish-name">
-                      {dish.name}
-                    </span>
-                  </td>
-
-                  <td>{dish.price}</td>
-                  <td>{dish.cost}</td>
-
-                  <td>
-                    <span className="margin">
-                      {dish.margin}
-                    </span>
-                  </td>
-
-                  <td>{dish.sales}</td>
-
-                  <td>
-                    <span
-                      className={`badge ${dish.tagType}`}
-                    >
-                      {dish.tag}
-                    </span>
-                  </td>
+          <div
+            style={{
+              width: "100%",
+              overflowX: "auto",
+            }}
+          >
+            <table className="dish-table">
+              <thead>
+                <tr>
+                  <th>菜品</th>
+                  <th>售价</th>
+                  <th>成本</th>
+                  <th>毛利率</th>
+                  <th>销量</th>
+                  <th>AI 判断</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody>
+                {dishes.map((dish) => (
+                  <tr key={dish.name}>
+                    <td>
+                      <span className="dish-name">
+                        {dish.name}
+                      </span>
+                    </td>
+
+                    <td>{dish.price}</td>
+
+                    <td>{dish.cost}</td>
+
+                    <td>
+                      <span className="margin">
+                        {dish.margin}
+                      </span>
+                    </td>
+
+                    <td>{dish.sales}</td>
+
+                    <td>
+                      <span
+                        className={`badge ${dish.tagType}`}
+                      >
+                        {dish.tag}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* =========================
+            Create Restaurant
+        ========================== */}
+        <section
+          style={{
+            marginTop: "18px",
+            padding: "20px",
+            borderRadius: "16px",
+            background: "#171717",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "20px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "15px",
+                fontWeight: 800,
+                marginBottom: "5px",
+              }}
+            >
+              还没有完善你的餐厅资料？
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                color: "#aaa",
+              }}
+            >
+              完善门店信息后，餐谋 AI 才能给你更准确的经营建议。
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                "/restaurant/create"
+              )
+            }
+            style={{
+              flexShrink: 0,
+              border: 0,
+              borderRadius: "9px",
+              padding: "11px 16px",
+              background: "#fff",
+              color: "#171717",
+              fontSize: "12px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            创建我的餐厅 →
+          </button>
         </section>
       </main>
     </div>
