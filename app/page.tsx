@@ -12,6 +12,7 @@ import {
   Settings,
   Sparkles,
   TrendingUp,
+  User,
   Utensils,
   Wallet,
 } from "lucide-react";
@@ -108,7 +109,9 @@ export default function Home() {
 
           <div>
             <div className="logo-title">餐谋 AI</div>
-            <div className="logo-subtitle">懂餐饮，更懂赚钱</div>
+            <div className="logo-subtitle">
+              懂餐饮，更懂赚钱
+            </div>
           </div>
         </div>
 
@@ -146,7 +149,9 @@ export default function Home() {
 
         <div className="sidebar-bottom">
           <div className="pro-mini">
-            <div className="pro-mini-title">升级餐谋 PRO</div>
+            <div className="pro-mini-title">
+              升级餐谋 PRO
+            </div>
 
             <div className="pro-mini-text">
               解锁完整 AI 经营分析，让每一次经营决策都有数据依据。
@@ -157,9 +162,10 @@ export default function Home() {
             </button>
           </div>
 
-          <a href="/login" className="nav-item">
-            <LogIn />
-            登录 / 我的账户
+          {/* 我的账户 */}
+          <a href="/account" className="nav-item">
+            <User />
+            我的账户
           </a>
         </div>
       </aside>
@@ -176,11 +182,12 @@ export default function Home() {
             <span>餐谋 AI</span>
           </div>
 
-          <a href="/login">
-            <LogIn size={20} />
+          <a href="/account">
+            <User size={20} />
           </a>
         </div>
 
+        {/* Topbar */}
         <div className="topbar">
           <div>
             <h1 className="page-title">
@@ -204,7 +211,7 @@ export default function Home() {
             </button>
 
             <a
-              href="/login"
+              href="/account"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -218,8 +225,8 @@ export default function Home() {
                 textDecoration: "none",
               }}
             >
-              <LogIn size={14} />
-              登录 / 注册
+              <User size={14} />
+              我的账户
             </a>
           </div>
         </div>
@@ -396,7 +403,6 @@ export default function Home() {
                   </td>
 
                   <td>{dish.price}</td>
-
                   <td>{dish.cost}</td>
 
                   <td>
