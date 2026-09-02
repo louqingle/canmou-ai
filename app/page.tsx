@@ -99,115 +99,175 @@ const chartData = [
   { day: "今天", value: 88 },
 ];
 
+type Restaurant = {
+  id: string;
+  name: string;
+  category: string;
+  city: string;
+  address: string | null;
+  daily_orders: number | null;
+  average_price: number | null;
+};
+
 export default function Home() {
   const router = useRouter();
 
   const [checking, setChecking] = useState(true);
+  const [restaurant, setRestaurant] =
+    useState<Restaurant | null>(null);
 
-  const [restaurantName, setRestaurantName] = useState("");
-  const [restaurantCategory, setRestaurantCategory] = useState("");
-  const [restaurantCity, setRestaurantCity] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
+    let mounted = true;
 
     async function init() {
       try {
+        setChecking(true);
+        setError("");
+
         /*
-         * 1. 获取当前登录状态
-         *
-         * 这里使用 getSession，
-         * 不再监听 onAuthStateChange，
-         * 避免登录后重复触发跳转。
+         * =====================================================
+         * 1. 获取当前登录用户
+         * =====================================================
          */
+
         const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-        if (cancelled) return;
+        if (!mounted) return;
 
-        if (error || !session?.user) {
+        if (userError) {
+          console.error(
+            "获取登录用户失败:",
+            userError
+          );
+
           router.replace("/login");
           return;
         }
 
-        const user = session.user;
-        const metadata = user.user_metadata || {};
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
 
         /*
-         * 2. 获取餐厅资料
+         * =====================================================
+         * 2. 直接从 restaurants 表检查餐厅
          *
-         * 登录注册时我们保存的是：
+         * 不再检查：
          *
-         * restaurant_name
-         * restaurant_category
-         * restaurant_city
-         * restaurant_created
+         * user.user_metadata.restaurant_created
+         *
+         * 这样可以彻底解决：
+         *
+         * 首页 ↔ 创建餐厅 无限跳转
+         * =====================================================
          */
 
-        const name =
-          typeof metadata.restaurant_name === "string"
-            ? metadata.restaurant_name.trim()
-            : "";
+        const {
+          data: restaurantData,
+          error: restaurantError,
+        } = await supabase
+          .from("restaurants")
+          .select(
+            `
+              id,
+              name,
+              category,
+              city,
+              address,
+              daily_orders,
+              average_price
+            `
+          )
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle();
 
-        const category =
-          typeof metadata.restaurant_category === "string"
-            ? metadata.restaurant_category.trim()
-            : "";
-
-        const city =
-          typeof metadata.restaurant_city === "string"
-            ? metadata.restaurant_city.trim()
-            : "";
-
-        const created =
-          metadata.restaurant_created === true ||
-          metadata.restaurant_created === "true";
+        if (!mounted) return;
 
         /*
-         * 3. 没有餐厅 → 创建餐厅
-         *
-         * 注意：
-         * 这里不要 window.location.replace()
-         *
-         * 统一使用 Next.js router，
-         * 避免 Vercel 部署后出现网址无效/重新加载问题。
+         * =====================================================
+         * 3. 数据库读取失败
+         * =====================================================
          */
 
-        if (!created || !name) {
+        if (restaurantError) {
+          console.error(
+            "读取餐厅失败:",
+            restaurantError
+          );
+
+          setError(
+            `读取餐厅失败：${restaurantError.message}`
+          );
+
+          setChecking(false);
+          return;
+        }
+
+        /*
+         * =====================================================
+         * 4. 当前用户没有餐厅
+         *
+         * 去创建餐厅页面
+         * =====================================================
+         */
+
+        if (!restaurantData) {
           router.replace("/restaurant/create");
           return;
         }
 
         /*
-         * 4. 已经创建餐厅
+         * =====================================================
+         * 5. 有餐厅
+         *
+         * 直接进入经营总览
+         * =====================================================
          */
 
-        setRestaurantName(name);
-        setRestaurantCategory(category);
-        setRestaurantCity(city);
+        setRestaurant(
+          restaurantData as Restaurant
+        );
 
         setChecking(false);
-      } catch (error) {
-        console.error("初始化失败:", error);
+      } catch (err) {
+        console.error(
+          "首页初始化失败:",
+          err
+        );
 
-        if (!cancelled) {
-          router.replace("/login");
-        }
+        if (!mounted) return;
+
+        setError(
+          "页面初始化失败，请刷新后重试。"
+        );
+
+        setChecking(false);
       }
     }
 
     init();
 
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, [router]);
 
   /*
-   * 登录状态 / 餐厅资料检查中
+   * =====================================================
+   * 加载状态
+   * =====================================================
    */
+
   if (checking) {
     return (
       <main
@@ -229,16 +289,27 @@ export default function Home() {
             border: "3px solid #ddd",
             borderTopColor: "#171717",
             borderRadius: "50%",
-            animation: "spin 0.8s linear infinite",
+            animation:
+              "spin 0.8s linear infinite",
           }}
         />
 
         <div
           style={{
             fontSize: "14px",
+            fontWeight: 600,
           }}
         >
           正在进入餐谋 AI...
+        </div>
+
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#aaa",
+          }}
+        >
+          正在检查餐厅资料
         </div>
 
         <style jsx>{`
@@ -256,6 +327,94 @@ export default function Home() {
     );
   }
 
+  /*
+   * =====================================================
+   * 数据库错误
+   * =====================================================
+   */
+
+  if (error) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f7f7f5",
+          padding: "20px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "480px",
+            background: "#fff",
+            border: "1px solid #e7e7e3",
+            borderRadius: "16px",
+            padding: "25px",
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "17px",
+              fontWeight: 850,
+              marginBottom: "10px",
+            }}
+          >
+            餐厅资料读取失败
+          </div>
+
+          <div
+            style={{
+              fontSize: "13px",
+              lineHeight: 1.7,
+              color: "#777",
+              wordBreak: "break-word",
+            }}
+          >
+            {error}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: "18px",
+              width: "100%",
+              height: "44px",
+              border: 0,
+              borderRadius: "10px",
+              background: "#171717",
+              color: "#fff",
+              fontSize: "13px",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            重新加载
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * 理论上不会出现
+   */
+
+  if (!restaurant) {
+    return null;
+  }
+
+  /*
+   * =====================================================
+   * 正式经营总览
+   * =====================================================
+   */
+
   return (
     <div className="app">
       {/* =========================
@@ -263,8 +422,6 @@ export default function Home() {
       ========================== */}
 
       <aside className="sidebar">
-        {/* Logo */}
-
         <div className="logo">
           <div className="logo-mark">
             <ChefHat size={21} />
@@ -280,8 +437,6 @@ export default function Home() {
             </div>
           </div>
         </div>
-
-        {/* Navigation */}
 
         <nav className="nav">
           <button
@@ -328,15 +483,15 @@ export default function Home() {
             className="nav-item"
             type="button"
             onClick={() =>
-              router.push("/restaurant/create")
+              router.push(
+                "/restaurant/create"
+              )
             }
           >
             <Settings />
             门店设置
           </button>
         </nav>
-
-        {/* Bottom */}
 
         <div className="sidebar-bottom">
           <div className="pro-mini">
@@ -406,9 +561,7 @@ export default function Home() {
           </button>
         </div>
 
-        {/* =========================
-            Topbar
-        ========================== */}
+        {/* Topbar */}
 
         <div className="topbar">
           <div>
@@ -417,12 +570,12 @@ export default function Home() {
             </h1>
 
             <p className="page-desc">
-              {restaurantName}
-              {restaurantCity
-                ? ` · ${restaurantCity}`
+              {restaurant.name}
+              {restaurant.city
+                ? ` · ${restaurant.city}`
                 : ""}
-              {restaurantCategory
-                ? ` · ${restaurantCategory}`
+              {restaurant.category
+                ? ` · ${restaurant.category}`
                 : ""}
             </p>
           </div>
@@ -434,8 +587,6 @@ export default function Home() {
               gap: "10px",
             }}
           >
-            {/* 餐厅选择 */}
-
             <button
               className="store-selector"
               type="button"
@@ -445,10 +596,8 @@ export default function Home() {
                 )
               }
             >
-              📍 {restaurantName}　⌄
+              📍 {restaurant.name}　⌄
             </button>
-
-            {/* 账户 */}
 
             <button
               type="button"
@@ -475,9 +624,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* =========================
-            Restaurant Info
-        ========================== */}
+        {/* Restaurant Info */}
 
         <section
           style={{
@@ -523,7 +670,7 @@ export default function Home() {
                   color: "#171717",
                 }}
               >
-                {restaurantName}
+                {restaurant.name}
               </div>
 
               <div
@@ -533,9 +680,10 @@ export default function Home() {
                   color: "#999",
                 }}
               >
-                {restaurantCity || "未填写城市"}
+                {restaurant.city || "未填写城市"}
                 {" · "}
-                {restaurantCategory || "未填写类型"}
+                {restaurant.category ||
+                  "未填写类型"}
               </div>
             </div>
           </div>
@@ -563,9 +711,7 @@ export default function Home() {
           </button>
         </section>
 
-        {/* =========================
-            AI Banner
-        ========================== */}
+        {/* AI Banner */}
 
         <section className="ai-banner">
           <div className="ai-label">
@@ -590,9 +736,7 @@ export default function Home() {
           </button>
         </section>
 
-        {/* =========================
-            Stats
-        ========================== */}
+        {/* Stats */}
 
         <section className="stats-grid">
           {stats.map((stat) => {
@@ -629,13 +773,9 @@ export default function Home() {
           })}
         </section>
 
-        {/* =========================
-            Chart + Diagnosis
-        ========================== */}
+        {/* Chart + Diagnosis */}
 
         <section className="content-grid">
-          {/* Chart */}
-
           <div className="card section-card">
             <div className="section-title">
               <h3>
@@ -675,8 +815,6 @@ export default function Home() {
               )}
             </div>
           </div>
-
-          {/* Diagnosis */}
 
           <div className="card section-card">
             <div className="section-title">
@@ -743,9 +881,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* =========================
-            Dishes
-        ========================== */}
+        {/* Dishes */}
 
         <section className="card section-card dishes-card">
           <div className="section-title">
@@ -826,9 +962,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* =========================
-            Footer
-        ========================== */}
+        {/* Footer */}
 
         <section
           style={{
@@ -851,7 +985,7 @@ export default function Home() {
                 marginBottom: "5px",
               }}
             >
-              {restaurantName}
+              {restaurant.name}
             </div>
 
             <div
