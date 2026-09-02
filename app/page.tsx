@@ -106,7 +106,7 @@ type Restaurant = {
   city: string;
   address: string | null;
   daily_orders: number | null;
-  average_price: number | null;
+  average_price: number | string | null;
 };
 
 export default function Home() {
@@ -116,22 +116,16 @@ export default function Home() {
   const [restaurant, setRestaurant] =
     useState<Restaurant | null>(null);
 
-  const [error, setError] = useState("");
-
   useEffect(() => {
     let mounted = true;
 
     async function init() {
       try {
         setChecking(true);
-        setError("");
 
         /*
-         * =====================================================
-         * 1. 获取当前登录用户
-         * =====================================================
+         * ① 只检查 Supabase 登录状态
          */
-
         const {
           data: { user },
           error: userError,
@@ -139,50 +133,25 @@ export default function Home() {
 
         if (!mounted) return;
 
-        if (userError) {
-          console.error(
-            "获取登录用户失败:",
-            userError
-          );
-
-          router.replace("/login");
-          return;
-        }
-
-        if (!user) {
+        if (userError || !user) {
           router.replace("/login");
           return;
         }
 
         /*
-         * =====================================================
-         * 2. 直接从 restaurants 表检查餐厅
+         * ② 直接从 restaurants 表读取餐厅
          *
-         * 不再检查：
+         * 不再读取 user_metadata。
          *
-         * user.user_metadata.restaurant_created
-         *
-         * 这样可以彻底解决：
-         *
-         * 首页 ↔ 创建餐厅 无限跳转
-         * =====================================================
+         * 数据库才是唯一标准。
          */
-
         const {
-          data: restaurantData,
+          data,
           error: restaurantError,
         } = await supabase
           .from("restaurants")
           .select(
-            `
-              id,
-              name,
-              category,
-              city,
-              address,
-              daily_orders,
-              average_price
-            `
+            "id,name,category,city,address,daily_orders,average_price"
           )
           .eq("user_id", user.id)
           .order("created_at", {
@@ -193,65 +162,44 @@ export default function Home() {
 
         if (!mounted) return;
 
-        /*
-         * =====================================================
-         * 3. 数据库读取失败
-         * =====================================================
-         */
-
         if (restaurantError) {
           console.error(
             "读取餐厅失败:",
             restaurantError
           );
 
-          setError(
-            `读取餐厅失败：${restaurantError.message}`
-          );
-
+          /*
+           * 如果数据库读取失败，
+           * 不要跳去登录页，也不要跳创建页。
+           *
+           * 否则非常容易形成死循环。
+           */
           setChecking(false);
           return;
         }
 
         /*
-         * =====================================================
-         * 4. 当前用户没有餐厅
-         *
-         * 去创建餐厅页面
-         * =====================================================
+         * ③ 没有餐厅
          */
-
-        if (!restaurantData) {
+        if (!data) {
           router.replace("/restaurant/create");
           return;
         }
 
         /*
-         * =====================================================
-         * 5. 有餐厅
-         *
-         * 直接进入经营总览
-         * =====================================================
+         * ④ 已经有餐厅
          */
-
-        setRestaurant(
-          restaurantData as Restaurant
-        );
-
+        setRestaurant(data);
         setChecking(false);
-      } catch (err) {
+      } catch (error) {
         console.error(
           "首页初始化失败:",
-          err
+          error
         );
 
-        if (!mounted) return;
-
-        setError(
-          "页面初始化失败，请刷新后重试。"
-        );
-
-        setChecking(false);
+        if (mounted) {
+          setChecking(false);
+        }
       }
     }
 
@@ -263,9 +211,9 @@ export default function Home() {
   }, [router]);
 
   /*
-   * =====================================================
-   * 加载状态
-   * =====================================================
+   * =========================
+   * Loading
+   * =========================
    */
 
   if (checking) {
@@ -284,8 +232,8 @@ export default function Home() {
       >
         <div
           style={{
-            width: "34px",
-            height: "34px",
+            width: "36px",
+            height: "36px",
             border: "3px solid #ddd",
             borderTopColor: "#171717",
             borderRadius: "50%",
@@ -301,15 +249,6 @@ export default function Home() {
           }}
         >
           正在进入餐谋 AI...
-        </div>
-
-        <div
-          style={{
-            fontSize: "11px",
-            color: "#aaa",
-          }}
-        >
-          正在检查餐厅资料
         </div>
 
         <style jsx>{`
@@ -328,12 +267,9 @@ export default function Home() {
   }
 
   /*
-   * =====================================================
-   * 数据库错误
-   * =====================================================
+   * 如果数据库查询失败
    */
-
-  if (error) {
+  if (!restaurant) {
     return (
       <main
         style={{
@@ -343,53 +279,58 @@ export default function Home() {
           justifyContent: "center",
           background: "#f7f7f5",
           padding: "20px",
-          boxSizing: "border-box",
         }}
       >
         <div
           style={{
             width: "100%",
-            maxWidth: "480px",
+            maxWidth: "420px",
             background: "#fff",
-            border: "1px solid #e7e7e3",
+            border: "1px solid #e5e5e1",
             borderRadius: "16px",
-            padding: "25px",
-            boxSizing: "border-box",
+            padding: "28px",
+            textAlign: "center",
           }}
         >
-          <div
+          <ChefHat
+            size={30}
             style={{
-              fontSize: "17px",
-              fontWeight: 850,
-              marginBottom: "10px",
+              marginBottom: "12px",
             }}
-          >
-            餐厅资料读取失败
-          </div>
+          />
 
-          <div
+          <h2
             style={{
-              fontSize: "13px",
-              lineHeight: 1.7,
-              color: "#777",
-              wordBreak: "break-word",
+              margin: "0 0 8px",
+              fontSize: "18px",
             }}
           >
-            {error}
-          </div>
+            暂时无法读取餐厅资料
+          </h2>
+
+          <p
+            style={{
+              margin: "0 0 18px",
+              color: "#888",
+              fontSize: "13px",
+              lineHeight: 1.6,
+            }}
+          >
+            请检查网络连接后重新进入。
+          </p>
 
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={() =>
+              window.location.reload()
+            }
             style={{
-              marginTop: "18px",
-              width: "100%",
-              height: "44px",
               border: 0,
-              borderRadius: "10px",
+              borderRadius: "9px",
               background: "#171717",
               color: "#fff",
-              fontSize: "13px",
+              padding: "11px 18px",
+              fontSize: "12px",
               fontWeight: 800,
               cursor: "pointer",
             }}
@@ -400,20 +341,6 @@ export default function Home() {
       </main>
     );
   }
-
-  /*
-   * 理论上不会出现
-   */
-
-  if (!restaurant) {
-    return null;
-  }
-
-  /*
-   * =====================================================
-   * 正式经营总览
-   * =====================================================
-   */
 
   return (
     <div className="app">
@@ -529,17 +456,13 @@ export default function Home() {
       ========================== */}
 
       <main className="main">
-        {/* Mobile Header */}
-
         <div className="mobile-header">
           <div className="mobile-logo">
             <div className="mobile-logo-mark">
               <ChefHat size={18} />
             </div>
 
-            <span>
-              餐谋 AI
-            </span>
+            <span>餐谋 AI</span>
           </div>
 
           <button
@@ -680,7 +603,8 @@ export default function Home() {
                   color: "#999",
                 }}
               >
-                {restaurant.city || "未填写城市"}
+                {restaurant.city ||
+                  "未填写城市"}
                 {" · "}
                 {restaurant.category ||
                   "未填写类型"}
