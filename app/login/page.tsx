@@ -1,18 +1,71 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { ChefHat, Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  ChefHat,
+  Loader2,
+  MessageCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [countdown, setCountdown] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown((value) => value - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  function normalizePhone(value: string) {
+    return value.replace(/\D/g, "").slice(0, 11);
+  }
+
+  async function sendCode() {
+    setError("");
+    setMessage("");
+
+    const cleanPhone = normalizePhone(phone);
+
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError("请输入正确的中国大陆手机号");
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: `+86${cleanPhone}`,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setCountdown(60);
+      setMessage("验证码已发送，请注意查收短信");
+    } catch (err) {
+      const text =
+        err instanceof Error ? err.message : "验证码发送失败";
+
+      setError(text);
+    } finally {
+      setSending(false);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -20,57 +73,41 @@ export default function LoginPage() {
     setError("");
     setMessage("");
 
-    if (!email || !password) {
-      setError("请输入邮箱和密码");
+    const cleanPhone = normalizePhone(phone);
+
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError("请输入正确的中国大陆手机号");
       return;
     }
 
-    if (password.length < 6) {
-      setError("密码至少需要 6 位");
+    if (!/^\d{6}$/.test(code)) {
+      setError("请输入 6 位验证码");
       return;
     }
 
     setLoading(true);
 
     try {
-      if (isRegister) {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-        });
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: `+86${cleanPhone}`,
+        token: code,
+        type: "sms",
+      });
 
-        if (error) {
-          throw error;
-        }
-
-        if (data.session) {
-          window.location.href = "/";
-        } else {
-          setMessage("注册成功，请检查邮箱完成验证，然后登录。");
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        window.location.href = "/";
+      if (error) {
+        throw error;
       }
+
+      if (!data.session) {
+        throw new Error("登录状态创建失败，请重新获取验证码");
+      }
+
+      window.location.href = "/";
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "操作失败，请稍后重试";
+      const text =
+        err instanceof Error ? err.message : "登录失败，请稍后重试";
 
-      if (errorMessage.toLowerCase().includes("invalid login")) {
-        setError("邮箱或密码错误");
-      } else if (errorMessage.toLowerCase().includes("already registered")) {
-        setError("这个邮箱已经注册过了，请直接登录");
-      } else {
-        setError(errorMessage);
-      }
+      setError(text);
     } finally {
       setLoading(false);
     }
@@ -91,56 +128,107 @@ export default function LoginPage() {
 
           <div>
             <div className="auth-logo-title">餐谋 AI</div>
-            <div className="auth-logo-subtitle">懂餐饮，更懂赚钱</div>
+            <div className="auth-logo-subtitle">
+              懂餐饮，更懂赚钱
+            </div>
           </div>
         </div>
 
         <div className="auth-heading">
-          <h1>{isRegister ? "创建你的餐谋账户" : "欢迎回来"}</h1>
+          <h1>登录餐谋 AI</h1>
+
           <p>
-            {isRegister
-              ? "从今天开始，让 AI 帮你经营餐厅。"
-              : "登录后继续管理你的餐厅。"}
+            用手机号登录，开始管理你的餐厅。
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form
+          onSubmit={handleSubmit}
+          className="auth-form"
+        >
           <label>
-            邮箱
+            手机号
+
             <input
-              type="email"
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              type="tel"
+              inputMode="numeric"
+              placeholder="请输入手机号"
+              value={phone}
+              onChange={(e) =>
+                setPhone(normalizePhone(e.target.value))
+              }
+              maxLength={11}
+              autoComplete="tel"
             />
           </label>
 
           <label>
-            密码
-            <div className="password-input">
+            短信验证码
+
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                marginTop: "8px",
+              }}
+            >
               <input
-                type={showPassword ? "text" : "password"}
-                placeholder="至少 6 位密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={isRegister ? "new-password" : "current-password"}
+                type="text"
+                inputMode="numeric"
+                placeholder="请输入 6 位验证码"
+                value={code}
+                onChange={(e) =>
+                  setCode(
+                    e.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 6)
+                  )
+                }
+                maxLength={6}
+                autoComplete="one-time-code"
+                style={{
+                  marginTop: 0,
+                  flex: 1,
+                }}
               />
 
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                onClick={sendCode}
+                disabled={sending || countdown > 0}
+                style={{
+                  width: "112px",
+                  flexShrink: 0,
+                  border: "1px solid #dededb",
+                  borderRadius: "10px",
+                  background: "#fff",
+                  color:
+                    countdown > 0
+                      ? "#aaa"
+                      : "var(--orange)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                }}
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {sending
+                  ? "发送中..."
+                  : countdown > 0
+                    ? `${countdown}s 后重发`
+                    : "获取验证码"}
               </button>
             </div>
           </label>
 
-          {error && <div className="auth-message error">{error}</div>}
+          {error && (
+            <div className="auth-message error">
+              {error}
+            </div>
+          )}
 
           {message && (
-            <div className="auth-message success">{message}</div>
+            <div className="auth-message success">
+              {message}
+            </div>
           )}
 
           <button
@@ -150,34 +238,25 @@ export default function LoginPage() {
           >
             {loading ? (
               <>
-                <Loader2 size={17} className="spin" />
-                请稍候...
+                <Loader2
+                  size={17}
+                  className="spin"
+                />
+                登录中...
               </>
-            ) : isRegister ? (
-              "创建账户"
             ) : (
-              "登录餐谋 AI"
+              <>
+                <MessageCircle size={17} />
+                登录 / 注册
+              </>
             )}
           </button>
         </form>
 
-        <div className="auth-switch">
-          {isRegister ? "已经有账户？" : "还没有餐谋账户？"}
-
-          <button
-            type="button"
-            onClick={() => {
-              setIsRegister(!isRegister);
-              setError("");
-              setMessage("");
-            }}
-          >
-            {isRegister ? "立即登录" : "免费注册"}
-          </button>
-        </div>
-
         <div className="auth-footer">
-          注册即表示你同意餐谋 AI 的服务条款与隐私政策。
+          首次使用手机号登录会自动创建餐谋 AI 账户。
+          <br />
+          登录即表示你同意服务条款与隐私政策。
         </div>
       </div>
     </main>
