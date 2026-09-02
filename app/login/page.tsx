@@ -1,71 +1,29 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   ArrowLeft,
   ChefHat,
+  Eye,
+  EyeOff,
   Loader2,
-  MessageCircle,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [countdown, setCountdown] = useState(0);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [mode, setMode] = useState<"login" | "register">("login");
+
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (countdown <= 0) return;
-
-    const timer = setInterval(() => {
-      setCountdown((value) => value - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [countdown]);
-
-  function normalizePhone(value: string) {
-    return value.replace(/\D/g, "").slice(0, 11);
-  }
-
-  async function sendCode() {
-    setError("");
-    setMessage("");
-
-    const cleanPhone = normalizePhone(phone);
-
-    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
-      setError("请输入正确的中国大陆手机号");
-      return;
-    }
-
-    setSending(true);
-
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: `+86${cleanPhone}`,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setCountdown(60);
-      setMessage("验证码已发送，请注意查收短信");
-    } catch (err) {
-      const text =
-        err instanceof Error ? err.message : "验证码发送失败";
-
-      setError(text);
-    } finally {
-      setSending(false);
-    }
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -73,44 +31,92 @@ export default function LoginPage() {
     setError("");
     setMessage("");
 
-    const cleanPhone = normalizePhone(phone);
+    const cleanEmail = email.trim().toLowerCase();
 
-    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
-      setError("请输入正确的中国大陆手机号");
+    if (!cleanEmail) {
+      setError("请输入邮箱地址");
       return;
     }
 
-    if (!/^\d{6}$/.test(code)) {
-      setError("请输入 6 位验证码");
+    if (!cleanEmail.includes("@")) {
+      setError("请输入正确的邮箱地址");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("密码至少需要 6 位");
       return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: `+86${cleanPhone}`,
-        token: code,
-        type: "sms",
-      });
+      if (mode === "login") {
+        const { data, error } =
+          await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data.session) {
+          throw new Error("登录状态创建失败，请重新登录");
+        }
+
+        window.location.href = "/";
+        return;
+      }
+
+      const { data, error } =
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+        });
 
       if (error) {
         throw error;
       }
 
-      if (!data.session) {
-        throw new Error("登录状态创建失败，请重新获取验证码");
+      if (data.session) {
+        window.location.href = "/";
+        return;
       }
 
-      window.location.href = "/";
+      setMessage(
+        "注册成功！请检查邮箱并完成验证，然后登录。"
+      );
     } catch (err) {
       const text =
-        err instanceof Error ? err.message : "登录失败，请稍后重试";
+        err instanceof Error
+          ? err.message
+          : "操作失败，请稍后重试";
 
-      setError(text);
+      if (
+        text.toLowerCase().includes("invalid login")
+      ) {
+        setError("邮箱或密码错误");
+      } else if (
+        text.toLowerCase().includes("already registered")
+      ) {
+        setError("这个邮箱已经注册，请直接登录");
+      } else {
+        setError(text);
+      }
     } finally {
       setLoading(false);
     }
+  }
+
+  function switchMode() {
+    setMode((current) =>
+      current === "login" ? "register" : "login"
+    );
+
+    setError("");
+    setMessage("");
   }
 
   return (
@@ -121,103 +127,153 @@ export default function LoginPage() {
           返回首页
         </Link>
 
+        {/* Logo */}
         <div className="auth-logo">
           <div className="auth-logo-mark">
             <ChefHat size={25} />
           </div>
 
           <div>
-            <div className="auth-logo-title">餐谋 AI</div>
+            <div className="auth-logo-title">
+              餐谋 AI
+            </div>
+
             <div className="auth-logo-subtitle">
               懂餐饮，更懂赚钱
             </div>
           </div>
         </div>
 
+        {/* Heading */}
         <div className="auth-heading">
-          <h1>登录餐谋 AI</h1>
+          <h1>
+            {mode === "login"
+              ? "登录餐谋 AI"
+              : "创建餐谋 AI 账户"}
+          </h1>
 
           <p>
-            用手机号登录，开始管理你的餐厅。
+            {mode === "login"
+              ? "登录后继续管理你的餐厅。"
+              : "注册账户，开始你的餐厅经营分析。"}
           </p>
         </div>
 
+        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="auth-form"
         >
           <label>
-            手机号
+            邮箱
 
             <input
-              type="tel"
-              inputMode="numeric"
-              placeholder="请输入手机号"
-              value={phone}
+              type="email"
+              placeholder="请输入邮箱地址"
+              value={email}
               onChange={(e) =>
-                setPhone(normalizePhone(e.target.value))
+                setEmail(e.target.value)
               }
-              maxLength={11}
-              autoComplete="tel"
+              autoComplete="email"
+              disabled={loading}
             />
           </label>
 
           <label>
-            短信验证码
+            密码
 
             <div
               style={{
-                display: "flex",
-                gap: "8px",
+                position: "relative",
                 marginTop: "8px",
               }}
             >
               <input
-                type="text"
-                inputMode="numeric"
-                placeholder="请输入 6 位验证码"
-                value={code}
-                onChange={(e) =>
-                  setCode(
-                    e.target.value
-                      .replace(/\D/g, "")
-                      .slice(0, 6)
-                  )
+                type={
+                  showPassword
+                    ? "text"
+                    : "password"
                 }
-                maxLength={6}
-                autoComplete="one-time-code"
+                placeholder="请输入密码（至少 6 位）"
+                value={password}
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
+                autoComplete={
+                  mode === "login"
+                    ? "current-password"
+                    : "new-password"
+                }
+                disabled={loading}
                 style={{
                   marginTop: 0,
-                  flex: 1,
+                  paddingRight: "48px",
                 }}
               />
 
               <button
                 type="button"
-                onClick={sendCode}
-                disabled={sending || countdown > 0}
+                onClick={() =>
+                  setShowPassword(
+                    (value) => !value
+                  )
+                }
+                disabled={loading}
+                aria-label={
+                  showPassword
+                    ? "隐藏密码"
+                    : "显示密码"
+                }
                 style={{
-                  width: "112px",
-                  flexShrink: 0,
-                  border: "1px solid #dededb",
-                  borderRadius: "10px",
-                  background: "#fff",
-                  color:
-                    countdown > 0
-                      ? "#aaa"
-                      : "var(--orange)",
-                  fontSize: "12px",
-                  fontWeight: 700,
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform:
+                    "translateY(-50%)",
+                  border: 0,
+                  background: "transparent",
+                  padding: "6px",
+                  color: "#777",
                 }}
               >
-                {sending
-                  ? "发送中..."
-                  : countdown > 0
-                    ? `${countdown}s 后重发`
-                    : "获取验证码"}
+                {showPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
               </button>
             </div>
           </label>
+
+          {/* Forgot password */}
+          {mode === "login" && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "flex-end",
+                marginTop: "-4px",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setMessage(
+                    "忘记密码功能下一步接入。"
+                  )
+                }
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  color: "var(--orange)",
+                  fontSize: "13px",
+                  padding: 0,
+                }}
+              >
+                忘记密码？
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="auth-message error">
@@ -242,21 +298,59 @@ export default function LoginPage() {
                   size={17}
                   className="spin"
                 />
-                登录中...
+                {mode === "login"
+                  ? "登录中..."
+                  : "注册中..."}
               </>
             ) : (
               <>
-                <MessageCircle size={17} />
-                登录 / 注册
+                {mode === "login" ? (
+                  <LogIn size={17} />
+                ) : (
+                  <UserPlus size={17} />
+                )}
+
+                {mode === "login"
+                  ? "登录"
+                  : "免费注册"}
               </>
             )}
           </button>
         </form>
 
+        {/* Switch */}
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "22px",
+            fontSize: "13px",
+            color: "#777",
+          }}
+        >
+          {mode === "login"
+            ? "还没有餐谋 AI 账户？"
+            : "已经有账户？"}
+
+          <button
+            type="button"
+            onClick={switchMode}
+            style={{
+              border: 0,
+              background: "transparent",
+              color: "var(--orange)",
+              fontWeight: 700,
+              marginLeft: "5px",
+              padding: 0,
+            }}
+          >
+            {mode === "login"
+              ? "立即注册"
+              : "立即登录"}
+          </button>
+        </div>
+
         <div className="auth-footer">
-          首次使用手机号登录会自动创建餐谋 AI 账户。
-          <br />
-          登录即表示你同意服务条款与隐私政策。
+          登录即表示你同意餐谋 AI 的服务条款与隐私政策。
         </div>
       </div>
     </main>
