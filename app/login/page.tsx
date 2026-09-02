@@ -4,11 +4,9 @@ import { FormEvent, useState } from "react";
 import {
   ArrowLeft,
   ChefHat,
-  Eye,
-  EyeOff,
   Loader2,
-  LogIn,
-  UserPlus,
+  Mail,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -19,9 +17,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<"login" | "register">("login");
 
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -33,12 +29,7 @@ export default function LoginPage() {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail) {
-      setError("请输入邮箱地址");
-      return;
-    }
-
-    if (!cleanEmail.includes("@")) {
+    if (!cleanEmail || !cleanEmail.includes("@")) {
       setError("请输入正确的邮箱地址");
       return;
     }
@@ -66,7 +57,13 @@ export default function LoginPage() {
           throw new Error("登录状态创建失败，请重新登录");
         }
 
-        window.location.href = "/";
+        /*
+         * 登录成功后先进入创建餐厅页面。
+         * 后面我们会增加：
+         * 已有餐厅 → 首页
+         * 没有餐厅 → 创建餐厅
+         */
+        window.location.href = "/restaurant/create";
         return;
       }
 
@@ -80,14 +77,19 @@ export default function LoginPage() {
         throw error;
       }
 
-      if (data.session) {
-        window.location.href = "/";
+      /*
+       * 如果 Supabase 开启了邮箱验证，
+       * 这里不会立即产生 session。
+       */
+      if (!data.session) {
+        setMessage(
+          "注册成功！请先打开邮箱，点击验证链接，然后回来登录。"
+        );
+        setMode("login");
         return;
       }
 
-      setMessage(
-        "注册成功！请检查邮箱并完成验证，然后登录。"
-      );
+      window.location.href = "/restaurant/create";
     } catch (err) {
       const text =
         err instanceof Error
@@ -95,13 +97,18 @@ export default function LoginPage() {
           : "操作失败，请稍后重试";
 
       if (
-        text.toLowerCase().includes("invalid login")
+        text.includes("Invalid login credentials")
       ) {
         setError("邮箱或密码错误");
       } else if (
-        text.toLowerCase().includes("already registered")
+        text.includes("User already registered")
       ) {
         setError("这个邮箱已经注册，请直接登录");
+        setMode("login");
+      } else if (
+        text.includes("Password should be at least")
+      ) {
+        setError("密码至少需要 6 位");
       } else {
         setError(text);
       }
@@ -110,24 +117,15 @@ export default function LoginPage() {
     }
   }
 
-  function switchMode() {
-    setMode((current) =>
-      current === "login" ? "register" : "login"
-    );
-
-    setError("");
-    setMessage("");
-  }
-
   return (
     <main className="auth-page">
       <div className="auth-card">
+
         <Link href="/" className="auth-back">
           <ArrowLeft size={16} />
           返回首页
         </Link>
 
-        {/* Logo */}
         <div className="auth-logo">
           <div className="auth-logo-mark">
             <ChefHat size={25} />
@@ -144,7 +142,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Heading */}
         <div className="auth-heading">
           <h1>
             {mode === "login"
@@ -154,47 +151,43 @@ export default function LoginPage() {
 
           <p>
             {mode === "login"
-              ? "登录后继续管理你的餐厅。"
-              : "注册账户，开始你的餐厅经营分析。"}
+              ? "登录后管理你的餐厅经营数据。"
+              : "创建账户，开始管理你的餐厅。"}
           </p>
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="auth-form"
         >
+
           <label>
             邮箱
 
-            <input
-              type="email"
-              placeholder="请输入邮箱地址"
-              value={email}
-              onChange={(e) =>
-                setEmail(e.target.value)
-              }
-              autoComplete="email"
-              disabled={loading}
-            />
+            <div className="input-with-icon">
+              <Mail size={17} />
+
+              <input
+                type="email"
+                placeholder="请输入邮箱"
+                value={email}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
+                autoComplete="email"
+              />
+            </div>
           </label>
 
           <label>
             密码
 
-            <div
-              style={{
-                position: "relative",
-                marginTop: "8px",
-              }}
-            >
+            <div className="input-with-icon">
+              <Lock size={17} />
+
               <input
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-                placeholder="请输入密码（至少 6 位）"
+                type="password"
+                placeholder="至少 6 位密码"
                 value={password}
                 onChange={(e) =>
                   setPassword(e.target.value)
@@ -204,76 +197,9 @@ export default function LoginPage() {
                     ? "current-password"
                     : "new-password"
                 }
-                disabled={loading}
-                style={{
-                  marginTop: 0,
-                  paddingRight: "48px",
-                }}
               />
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword(
-                    (value) => !value
-                  )
-                }
-                disabled={loading}
-                aria-label={
-                  showPassword
-                    ? "隐藏密码"
-                    : "显示密码"
-                }
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform:
-                    "translateY(-50%)",
-                  border: 0,
-                  background: "transparent",
-                  padding: "6px",
-                  color: "#777",
-                }}
-              >
-                {showPassword ? (
-                  <EyeOff size={18} />
-                ) : (
-                  <Eye size={18} />
-                )}
-              </button>
             </div>
           </label>
-
-          {/* Forgot password */}
-          {mode === "login" && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent:
-                  "flex-end",
-                marginTop: "-4px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  setMessage(
-                    "忘记密码功能下一步接入。"
-                  )
-                }
-                style={{
-                  border: 0,
-                  background: "transparent",
-                  color: "var(--orange)",
-                  fontSize: "13px",
-                  padding: 0,
-                }}
-              >
-                忘记密码？
-              </button>
-            </div>
-          )}
 
           {error && (
             <div className="auth-message error">
@@ -304,54 +230,53 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                {mode === "login" ? (
-                  <LogIn size={17} />
-                ) : (
-                  <UserPlus size={17} />
-                )}
-
                 {mode === "login"
                   ? "登录"
-                  : "免费注册"}
+                  : "创建账户"}
               </>
             )}
           </button>
         </form>
 
-        {/* Switch */}
-        <div
-          style={{
-            textAlign: "center",
-            marginTop: "22px",
-            fontSize: "13px",
-            color: "#777",
-          }}
-        >
-          {mode === "login"
-            ? "还没有餐谋 AI 账户？"
-            : "已经有账户？"}
+        <div className="auth-switch">
+          {mode === "login" ? (
+            <>
+              还没有账户？
 
-          <button
-            type="button"
-            onClick={switchMode}
-            style={{
-              border: 0,
-              background: "transparent",
-              color: "var(--orange)",
-              fontWeight: 700,
-              marginLeft: "5px",
-              padding: 0,
-            }}
-          >
-            {mode === "login"
-              ? "立即注册"
-              : "立即登录"}
-          </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("register");
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                免费注册
+              </button>
+            </>
+          ) : (
+            <>
+              已经有账户？
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                返回登录
+              </button>
+            </>
+          )}
         </div>
 
         <div className="auth-footer">
-          登录即表示你同意餐谋 AI 的服务条款与隐私政策。
+          登录即表示你同意餐谋 AI
+          的服务条款与隐私政策。
         </div>
+
       </div>
     </main>
   );
